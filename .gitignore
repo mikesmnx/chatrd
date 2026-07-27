@@ -1,0 +1,32 @@
+# JavaScript
+node_modules/
+out/
+dist/
+release/
+coverage/
+*.tsbuildinfo
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.pytest-tmp/
+.coverage
+htmlcov/
+.venv/
+*.egg-info/
+build/
+
+# Local application state and secrets
+.chatrd-data/
+*.session
+*.session-journal
+secrets.bin
+chatrd.db*
+*.log
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
