@@ -48,10 +48,10 @@ export function App() {
     return (
       <Centered>
         <div className="error-card">
-          <p className="eyebrow">Local worker unavailable</p>
-          <h1>ChatRD could not start</h1>
+          <p className="eyebrow">Ошибка запуска</p>
+          <h1>Не удалось запустить ChatRD</h1>
           <p>{fatalError}</p>
-          <button onClick={() => void reload()}>Try again</button>
+          <button onClick={() => void reload()}>Повторить</button>
         </div>
       </Centered>
     )
@@ -62,7 +62,7 @@ export function App() {
       <Centered>
         <div className="brand-loader">
           <Logo />
-          <p>Starting your private workspace…</p>
+          <p>Запуск…</p>
         </div>
       </Centered>
     )
@@ -146,16 +146,13 @@ function Onboarding({ onAuthorized }: { onAuthorized: () => Promise<void> }) {
       <aside className="onboarding-story">
         <Logo />
         <div>
-          <p className="eyebrow light">Private by design</p>
-          <h1>The messages that matter, gathered quietly.</h1>
-          <p>
-            ChatRD watches your chosen Telegram chats, matches your rules locally,
-            and creates one calm summary stream.
-          </p>
+          <p className="eyebrow light">Настройка</p>
+          <h1>Подключение к Telegram</h1>
+          <p>Войдите в Telegram, чтобы выбрать чаты и настроить правила.</p>
         </div>
         <div className="privacy-note">
           <LockIcon />
-          <span>No cloud backend. No message-body logs. Your account stays on this device.</span>
+          <span>Сессия и настройки хранятся на этом компьютере.</span>
         </div>
       </aside>
       <main className="onboarding-panel">
@@ -169,14 +166,14 @@ function Onboarding({ onAuthorized }: { onAuthorized: () => Promise<void> }) {
 
         {step === 'credentials' && (
           <form onSubmit={startLogin} className="form-card">
-            <p className="eyebrow">Connect Telegram</p>
-            <h2>Sign in with your personal account</h2>
+            <p className="eyebrow">Telegram</p>
+            <h2>Вход в личный аккаунт</h2>
             <p className="muted">
-              Create an API application at{' '}
+              Создайте приложение API на{' '}
               <a href="https://my.telegram.org/apps" target="_blank" rel="noreferrer">
                 my.telegram.org
               </a>{' '}
-              and enter its credentials below.
+              и введите полученные данные.
             </p>
             <Field label="API ID">
               <input
@@ -187,17 +184,17 @@ function Onboarding({ onAuthorized }: { onAuthorized: () => Promise<void> }) {
                 placeholder="12345678"
               />
             </Field>
-            <Field label="API hash">
+            <Field label="API Hash">
               <input
                 value={apiHash}
                 onChange={(event) => setApiHash(event.target.value)}
                 autoComplete="off"
                 spellCheck={false}
-                placeholder="32-character hash"
+                placeholder="32 символа"
                 type="password"
               />
             </Field>
-            <Field label="Phone number">
+            <Field label="Номер телефона">
               <input
                 value={phone}
                 onChange={(event) => setPhone(event.target.value)}
@@ -207,17 +204,17 @@ function Onboarding({ onAuthorized }: { onAuthorized: () => Promise<void> }) {
             </Field>
             <FormError message={error} />
             <button className="primary wide" disabled={busy}>
-              {busy ? 'Connecting…' : 'Send Telegram code'}
+              {busy ? 'Подключение…' : 'Получить код'}
             </button>
           </form>
         )}
 
         {step === 'code' && (
           <form onSubmit={submitCode} className="form-card compact">
-            <p className="eyebrow">Verification</p>
-            <h2>Enter the code from Telegram</h2>
-            <p className="muted">Telegram usually sends this code inside the Telegram app.</p>
-            <Field label="Login code">
+            <p className="eyebrow">Проверка</p>
+            <h2>Введите код из Telegram</h2>
+            <p className="muted">Код обычно приходит в приложение Telegram.</p>
+            <Field label="Код">
               <input
                 className="code-input"
                 value={code}
@@ -229,17 +226,17 @@ function Onboarding({ onAuthorized }: { onAuthorized: () => Promise<void> }) {
             </Field>
             <FormError message={error} />
             <button className="primary wide" disabled={busy || !code}>
-              {busy ? 'Checking…' : 'Continue'}
+              {busy ? 'Проверка…' : 'Продолжить'}
             </button>
           </form>
         )}
 
         {step === 'password' && (
           <form onSubmit={submitPassword} className="form-card compact">
-            <p className="eyebrow">Two-step verification</p>
-            <h2>Enter your Telegram password</h2>
-            <p className="muted">It is used for this request and is never saved.</p>
-            <Field label="Password">
+            <p className="eyebrow">Двухэтапная аутентификация</p>
+            <h2>Введите пароль Telegram</h2>
+            <p className="muted">Пароль используется только для входа и не сохраняется.</p>
+            <Field label="Пароль">
               <input
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
@@ -250,7 +247,7 @@ function Onboarding({ onAuthorized }: { onAuthorized: () => Promise<void> }) {
             </Field>
             <FormError message={error} />
             <button className="primary wide" disabled={busy || !password}>
-              {busy ? 'Signing in…' : 'Finish sign-in'}
+              {busy ? 'Вход…' : 'Войти'}
             </button>
           </form>
         )}
@@ -287,25 +284,25 @@ function Workspace({
     <div className="shell">
       <aside className="sidebar">
         <Logo />
-        <nav aria-label="Main navigation">
+        <nav aria-label="Основная навигация">
           <NavButton icon="◫" active={page === 'dashboard'} onClick={() => setPage('dashboard')}>
-            Dashboard
+            Состояние
           </NavButton>
           <NavButton icon="⌁" active={page === 'sources'} onClick={() => setPage('sources')}>
-            Sources
+            Источники
           </NavButton>
           <NavButton icon="✦" active={page === 'rules'} onClick={() => setPage('rules')}>
-            Rules
+            Правила
           </NavButton>
           <NavButton icon="⚙" active={page === 'settings'} onClick={() => setPage('settings')}>
-            Settings
+            Настройки
           </NavButton>
         </nav>
         <div className="sidebar-foot">
           <StatusDot state={snapshot.monitor.state} />
           <div>
             <strong>{statusLabel(snapshot.monitor.state)}</strong>
-            <span>Local processing</span>
+            <span>Локальная обработка</span>
           </div>
         </div>
       </aside>
@@ -341,9 +338,9 @@ function Dashboard({
   return (
     <>
       <PageHeader
-        eyebrow="Overview"
-        title="Your quiet Telegram radar"
-        description="Messages are evaluated on this device and delivered only to your selected summary chat."
+        eyebrow="Состояние"
+        title="Мониторинг"
+        description="Обработка сообщений выполняется на этом компьютере."
       >
         {snapshot.monitor.state === 'monitoring' || snapshot.monitor.state === 'catching_up' ? (
           <button
@@ -351,7 +348,7 @@ function Dashboard({
             disabled={busy}
             onClick={() => action(() => window.chatrd.call('monitor.pause'))}
           >
-            Pause monitoring
+            Приостановить
           </button>
         ) : (
           <button
@@ -359,14 +356,14 @@ function Dashboard({
             disabled={busy || !configured}
             onClick={() => action(() => window.chatrd.call('monitor.start'))}
           >
-            {busy ? 'Starting…' : 'Start monitoring'}
+            {busy ? 'Запуск…' : 'Запустить'}
           </button>
         )}
       </PageHeader>
 
       {!configured && (
         <div className="banner info">
-          Choose a destination, at least one source, and one rule before starting.
+          Перед запуском выберите чат назначения, источник и добавьте правило.
         </div>
       )}
 
@@ -376,14 +373,14 @@ function Dashboard({
           <p className="eyebrow">{statusLabel(snapshot.monitor.state)}</p>
           <h2>
             {snapshot.monitor.state === 'monitoring'
-              ? 'Listening for what matters'
+              ? 'Мониторинг запущен'
               : snapshot.monitor.state === 'catching_up'
-                ? 'Catching up safely'
-                : 'Monitoring is paused'}
+                ? 'Загрузка истории'
+                : 'Мониторинг приостановлен'}
           </h2>
           <p className="muted">
-            {snapshot.sources.length} source{snapshot.sources.length === 1 ? '' : 's'} ·{' '}
-            {snapshot.rules.length} rule{snapshot.rules.length === 1 ? '' : 's'}
+            {formatCount(snapshot.sources.length, ['источник', 'источника', 'источников'])} ·{' '}
+            {formatCount(snapshot.rules.length, ['правило', 'правила', 'правил'])}
           </p>
         </div>
         <div className="radar" aria-hidden="true">
@@ -395,11 +392,11 @@ function Dashboard({
       </section>
 
       <section className="stats-grid">
-        <Stat label="Sent to summary" value={snapshot.monitor.counts.sent ?? 0} tone="green" />
-        <Stat label="Checked locally" value={total} tone="ink" />
-        <Stat label="No match" value={snapshot.monitor.counts.no_match ?? 0} tone="sand" />
+        <Stat label="Отправлено" value={snapshot.monitor.counts.sent ?? 0} tone="green" />
+        <Stat label="Проверено" value={total} tone="ink" />
+        <Stat label="Без совпадений" value={snapshot.monitor.counts.no_match ?? 0} tone="sand" />
         <Stat
-          label="Needs attention"
+          label="Ошибки"
           value={snapshot.monitor.counts.permanently_failed ?? 0}
           tone="red"
         />
@@ -408,12 +405,12 @@ function Dashboard({
       <section className="panel">
         <div className="panel-heading">
           <div>
-            <p className="eyebrow">Source health</p>
-            <h3>Monitored chats</h3>
+            <p className="eyebrow">Источники</p>
+            <h3>Выбранные чаты</h3>
           </div>
         </div>
         {snapshot.sources.length === 0 ? (
-          <Empty title="No sources yet" text="Add source chats from the Sources page." />
+          <Empty title="Нет источников" text="Добавьте чаты на странице «Источники»." />
         ) : (
           <div className="source-list">
             {snapshot.sources.map((source) => (
@@ -423,12 +420,12 @@ function Dashboard({
                   <strong>{source.display_name}</strong>
                   <span>
                     {source.last_terminal_message_id
-                      ? `Cursor ${source.last_terminal_message_id}`
-                      : 'Waiting for first run'}
+                      ? `Последнее сообщение: ${source.last_terminal_message_id}`
+                      : 'Ещё не запускался'}
                   </span>
                 </div>
                 <span className={`pill ${source.error_code ? 'danger' : source.enabled ? 'ok' : ''}`}>
-                  {source.error_code ? 'Action required' : source.enabled ? 'Enabled' : 'Disabled'}
+                  {source.error_code ? 'Ошибка' : source.enabled ? 'Включён' : 'Выключен'}
                 </span>
               </div>
             ))}
@@ -472,29 +469,29 @@ function Sources({
   return (
     <>
       <PageHeader
-        eyebrow="Routing"
-        title="Choose where to listen"
-        description="The destination receives summaries. Source chats are watched using stable Telegram IDs."
+        eyebrow="Чаты"
+        title="Источники и назначение"
+        description="Выберите чат для отправки результатов и чаты для мониторинга."
       />
       <section className="panel">
         <div className="panel-heading">
           <div>
-            <p className="eyebrow">Step 1</p>
-            <h3>Summary destination</h3>
+            <p className="eyebrow">Шаг 1</p>
+            <h3>Чат назначения</h3>
           </div>
-          {destination && <span className="pill ok">Writable</span>}
+          {destination && <span className="pill ok">Выбран</span>}
         </div>
         {loadError && (
           <div className="inline-load-error" role="alert">
             <span>
-              <strong>Telegram chats could not be loaded.</strong>
+              <strong>Не удалось загрузить чаты Telegram.</strong>
               {loadError}
             </span>
-            <button className="secondary" onClick={loadPeers}>Try again</button>
+            <button className="secondary" onClick={loadPeers}>Повторить</button>
           </div>
         )}
         <label className="select-label">
-          Destination chat
+          Чат назначения
           <select
             value={snapshot.settings.destination_peer_id ?? ''}
             onChange={(event) =>
@@ -506,7 +503,7 @@ function Sources({
             }
           >
             <option value="" disabled>
-              Select a writable chat
+              Выберите чат
             </option>
             {peers
               .filter((peer) => peer.can_write && !sourceIds.has(peer.peer_id))
@@ -522,21 +519,21 @@ function Sources({
       <section className="panel">
         <div className="panel-heading">
           <div>
-            <p className="eyebrow">Step 2</p>
-            <h3>Monitored sources</h3>
+            <p className="eyebrow">Шаг 2</p>
+            <h3>Источники</h3>
           </div>
-          <span className="muted small">{sourceIds.size} selected</span>
+          <span className="muted small">{formatCount(sourceIds.size, ['выбран', 'выбрано', 'выбрано'])}</span>
         </div>
         {loading ? (
-          <Empty title="Loading Telegram chats…" text="This can take a moment for larger accounts." />
+          <Empty title="Загрузка чатов…" text="Подождите." />
         ) : loadError ? (
-          <Empty title="Sources unavailable" text="Retry after resolving the Telegram connection error above." />
+          <Empty title="Источники недоступны" text="Проверьте ошибку выше и повторите загрузку." />
         ) : peers.length === 0 ? (
           <div className="empty">
             <span>· · ·</span>
-            <strong>No Telegram chats returned</strong>
-            <p>Refresh the list or confirm this account has at least one Telegram conversation.</p>
-            <button className="secondary empty-action" onClick={loadPeers}>Refresh chats</button>
+            <strong>Чаты не найдены</strong>
+            <p>Обновите список или проверьте, что в аккаунте есть чаты.</p>
+            <button className="secondary empty-action" onClick={loadPeers}>Обновить</button>
           </div>
         ) : (
           <div className="chat-grid">
@@ -602,26 +599,26 @@ function SourceCard({
         <Avatar name={peer.display_name} />
         <span className="grow">
           <strong>{peer.display_name}</strong>
-          <small>{peer.peer_type}</small>
+          <small>{peerTypeLabel(peer.peer_type)}</small>
         </span>
       </label>
       {source && source.last_terminal_message_id === null && (
         <div className="scan-policy">
           <select
-            aria-label={`Initial scan for ${peer.display_name}`}
+            aria-label={`Начальная загрузка для ${peer.display_name}`}
             value={source.initial_scan_mode}
             onChange={(event) => {
               const mode = event.target.value as Source['initial_scan_mode']
               onPolicy(mode, mode === 'now' ? null : 24)
             }}
           >
-            <option value="now">Start from now</option>
-            <option value="latest_count">Latest messages</option>
-            <option value="recent_window">Recent hours</option>
+            <option value="now">Только новые сообщения</option>
+            <option value="latest_count">Последние сообщения</option>
+            <option value="recent_window">За последние часы</option>
           </select>
           {source.initial_scan_mode !== 'now' && (
             <input
-              aria-label="Scan amount"
+              aria-label="Количество для начальной загрузки"
               type="number"
               min="1"
               max="10000"
@@ -667,19 +664,19 @@ function Rules({
   return (
     <>
       <PageHeader
-        eyebrow="Filters"
-        title="Define what matters"
-        description="Rules are literal, local, and OR-combined. One message is delivered even when several rules match."
+        eyebrow="Фильтры"
+        title="Правила"
+        description="Сообщение отправляется, если сработало хотя бы одно правило."
       />
       <section className="rule-layout">
         <form className="panel rule-builder" onSubmit={create}>
           <div className="panel-heading">
             <div>
-              <p className="eyebrow">New rule</p>
-              <h3>Add a local filter</h3>
+              <p className="eyebrow">Новое правило</p>
+              <h3>Добавить правило</h3>
             </div>
           </div>
-          <Field label="Rule type">
+          <Field label="Тип">
             <div className="segmented">
               {(['keyword', 'phrase', 'hashtag'] as const).map((value) => (
                 <button
@@ -691,22 +688,22 @@ function Rules({
                   }}
                   key={value}
                 >
-                  {value}
+                  {ruleTypeLabel(value)}
                 </button>
               ))}
             </div>
           </Field>
-          <Field label={type === 'hashtag' ? 'Hashtag' : 'Text'}>
+          <Field label={type === 'hashtag' ? 'Хэштег' : 'Текст'}>
             <input
               value={pattern}
               onChange={(event) => setPattern(event.target.value)}
-              placeholder={type === 'hashtag' ? '#decision' : 'production release'}
+              placeholder={type === 'hashtag' ? '#решение' : 'выпуск версии'}
               maxLength={256}
             />
           </Field>
-          <Field label="Scope">
+          <Field label="Применить к">
             <select value={scope} onChange={(event) => setScope(event.target.value)}>
-              <option value="global">All monitored sources</option>
+              <option value="global">Всем источникам</option>
               {snapshot.sources.map((source) => (
                 <option key={source.peer_id} value={source.peer_id}>
                   {source.display_name}
@@ -722,25 +719,25 @@ function Rules({
                 onChange={(event) => setWholeWord(event.target.checked)}
               />
               <span>
-                <strong>Whole words only</strong>
-                <small>“cat” will not match “concatenate”</small>
+                <strong>Только целые слова</strong>
+                <small>«кот» не совпадёт со словом «котёнок»</small>
               </span>
             </label>
           )}
           <button className="primary wide" disabled={!pattern.trim()}>
-            Add rule
+            Добавить
           </button>
         </form>
 
         <section className="panel">
           <div className="panel-heading">
             <div>
-              <p className="eyebrow">Active set</p>
-              <h3>{snapshot.rules.length} configured rules</h3>
+              <p className="eyebrow">Список</p>
+              <h3>{formatCount(snapshot.rules.length, ['правило', 'правила', 'правил'])}</h3>
             </div>
           </div>
           {snapshot.rules.length === 0 ? (
-            <Empty title="No rules yet" text="Add a keyword, phrase, or hashtag to begin." />
+            <Empty title="Нет правил" text="Добавьте ключевое слово, фразу или хэштег." />
           ) : (
             <div className="rule-list">
               {snapshot.rules.map((rule) => {
@@ -753,11 +750,11 @@ function Rules({
                     <div className="grow">
                       <strong>{rule.pattern}</strong>
                       <span>
-                        {source?.display_name ?? 'All sources'} · {rule.type}
-                        {rule.whole_word ? ' · whole word' : ''}
+                        {source?.display_name ?? 'Все источники'} · {ruleTypeLabel(rule.type)}
+                        {rule.whole_word ? ' · целое слово' : ''}
                       </span>
                     </div>
-                    <label className="switch" title={rule.enabled ? 'Disable rule' : 'Enable rule'}>
+                    <label className="switch" title={rule.enabled ? 'Выключить правило' : 'Включить правило'}>
                       <input
                         type="checkbox"
                         checked={rule.enabled}
@@ -774,7 +771,7 @@ function Rules({
                     </label>
                     <button
                       className="icon-button danger-text"
-                      aria-label={`Delete ${rule.pattern}`}
+                      aria-label={`Удалить ${rule.pattern}`}
                       onClick={() =>
                         action(() => window.chatrd.call('rules.delete', { id: rule.id }))
                       }
@@ -802,15 +799,15 @@ function SettingsPage({
   return (
     <>
       <PageHeader
-        eyebrow="Preferences"
-        title="Local app settings"
-        description="Choose how matched messages arrive and manage this device's Telegram authorization."
+        eyebrow="Параметры"
+        title="Настройки"
+        description="Формат отправки и сессия Telegram."
       />
       <section className="panel settings-panel">
         <div>
-          <h3>Delivery format</h3>
+          <h3>Формат отправки</h3>
           <p className="muted">
-            Formatted copy adds source, author, time, matched rules, and an original link.
+            Копия содержит источник, автора, время, сработавшие правила и ссылку.
           </p>
         </div>
         <div className="choice-grid">
@@ -829,11 +826,11 @@ function SettingsPage({
                   )
                 }
               />
-              <strong>{mode === 'copy' ? 'Formatted copy' : 'Native forward'}</strong>
+              <strong>{mode === 'copy' ? 'Форматированная копия' : 'Пересылка Telegram'}</strong>
               <span>
                 {mode === 'copy'
-                  ? 'Clean summary with matching context'
-                  : 'Original Telegram message and media'}
+                  ? 'Текст с информацией об источнике'
+                  : 'Исходное сообщение вместе с медиа'}
               </span>
             </label>
           ))}
@@ -841,28 +838,26 @@ function SettingsPage({
       </section>
       <section className="panel danger-zone">
         <div>
-          <h3>Telegram session</h3>
+          <h3>Сессия Telegram</h3>
           <p className="muted">
-            Logging out revokes Telegram authorization when online and removes the
-            encrypted session from this computer.
+            При выходе сессия будет отозвана в Telegram и удалена с этого компьютера.
           </p>
         </div>
         <button
           className="danger-button"
           onClick={() => {
-            if (window.confirm('Log out of Telegram on this device?')) {
+            if (window.confirm('Выйти из Telegram на этом компьютере?')) {
               void action(() => window.chatrd.call('auth.logout'))
             }
           }}
         >
-          Log out
+          Выйти
         </button>
       </section>
       <div className="privacy-footer">
         <LockIcon />
         <p>
-          ChatRD connects only to Telegram. Message bodies are not stored in the local
-          database or diagnostic logs.
+          Тексты сообщений не сохраняются в локальной базе данных и журналах.
         </p>
       </div>
     </>
@@ -947,12 +942,42 @@ function StatusDot({ state }: { state: string }) {
 
 function statusLabel(state: string): string {
   return {
-    monitoring: 'Monitoring',
-    catching_up: 'Catching up',
-    paused: 'Paused',
-    offline: 'Offline',
-    action_required: 'Action required'
-  }[state] ?? 'Starting'
+    monitoring: 'Работает',
+    catching_up: 'Загрузка истории',
+    paused: 'Приостановлен',
+    offline: 'Нет подключения',
+    action_required: 'Требуется действие'
+  }[state] ?? 'Запуск'
+}
+
+function ruleTypeLabel(type: Rule['type']): string {
+  return {
+    keyword: 'Ключевое слово',
+    phrase: 'Фраза',
+    hashtag: 'Хэштег'
+  }[type]
+}
+
+function peerTypeLabel(type: string): string {
+  return {
+    user: 'Личный чат',
+    group: 'Группа',
+    supergroup: 'Супергруппа',
+    channel: 'Канал'
+  }[type] ?? 'Чат'
+}
+
+function formatCount(count: number, forms: [string, string, string]): string {
+  const lastTwo = count % 100
+  const last = count % 10
+  const form = lastTwo >= 11 && lastTwo <= 14
+    ? forms[2]
+    : last === 1
+      ? forms[0]
+      : last >= 2 && last <= 4
+        ? forms[1]
+        : forms[2]
+  return `${count} ${form}`
 }
 
 function Stat({
@@ -967,7 +992,7 @@ function Stat({
   return (
     <article className={`stat ${tone}`}>
       <span>{label}</span>
-      <strong>{value.toLocaleString()}</strong>
+      <strong>{value.toLocaleString('ru-RU')}</strong>
     </article>
   )
 }

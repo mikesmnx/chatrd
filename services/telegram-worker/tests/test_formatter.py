@@ -49,7 +49,7 @@ def test_long_content_is_truncated_within_limit_without_broken_escape() -> None:
         local_timezone=UTC,
     ).text
     assert len(output) <= TELEGRAM_TEXT_LIMIT
-    assert "[content truncated]" in output
+    assert "[текст сокращён]" in output
     assert output.count("&lt;") > 100
 
 
@@ -59,6 +59,5 @@ def test_missing_author_and_link_are_safe() -> None:
         (Rule("r", None, RuleType.KEYWORD, "release"),),
         local_timezone=UTC,
     ).text
-    assert "Unavailable" in output
-    assert "Open original message" not in output
-
+    assert "Не указан" in output
+    assert "Открыть исходное сообщение" not in output

@@ -94,7 +94,7 @@ class TelethonGateway:
                     TelegramPeer(
                         peer_id=peer_id,
                         peer_type=peer_type,
-                        display_name=dialog.name or "Unnamed chat",
+                        display_name=dialog.name or "Чат без названия",
                         username=username,
                         can_write=can_write,
                     )
@@ -203,7 +203,7 @@ class TelethonGateway:
             source_peer_id=peer_id,
             source_message_id=int(message.id),
             source_timestamp=ensure_utc(message.date),
-            source_name=utils.get_display_name(chat) or "Unnamed chat",
+            source_name=utils.get_display_name(chat) or "Чат без названия",
             text=text,
             author_name=utils.get_display_name(sender) if sender else None,
             source_username=getattr(chat, "username", None),

@@ -14,8 +14,8 @@ describe('validateCredentials', () => {
 
   it.each([
     [{ apiId: 'no', apiHash: 'abcdef0123456789abcdef0123456789', phone: '+35799123456' }, 'API ID'],
-    [{ apiId: '1', apiHash: 'short', phone: '+35799123456' }, 'API hash'],
-    [{ apiId: '1', apiHash: 'abcdef0123456789abcdef0123456789', phone: '99123456' }, 'international']
+    [{ apiId: '1', apiHash: 'short', phone: '+35799123456' }, 'API Hash'],
+    [{ apiId: '1', apiHash: 'abcdef0123456789abcdef0123456789', phone: '99123456' }, 'международном']
   ])('rejects invalid values', (values, message) => {
     expect(validateCredentials(values)).toContain(message)
   })
@@ -46,11 +46,19 @@ describe('reduceMonitorEvent', () => {
 })
 
 describe('parseDesktopError', () => {
-  it('extracts a safe worker message', () => {
+  it('translates a known worker message', () => {
     const error = new Error(
-      'Error invoking remote method: {"code":"validation_error","message":"Choose a source"}'
+      'Error invoking remote method: {"code":"validation_error","message":"Choose at least one source chat"}'
     )
-    expect(parseDesktopError(error)).toBe('Choose a source')
+    expect(parseDesktopError(error)).toBe('Выберите хотя бы один источник.')
+  })
+
+  it('uses a translated error-code fallback', () => {
+    const error = new Error(
+      'Error invoking remote method: {"code":"telegram_transient","message":"Unknown gateway failure"}'
+    )
+    expect(parseDesktopError(error)).toBe(
+      'Telegram временно недоступен. Повторите попытку позже.'
+    )
   })
 })
-

@@ -1,6 +1,6 @@
 {
   "name": "chatrd",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "Local Telegram message filter and forwarder",
   "author": "ChatRD contributors",

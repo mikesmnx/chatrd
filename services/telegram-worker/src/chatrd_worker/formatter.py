@@ -6,7 +6,7 @@ from html import escape
 from .models import FormattedMessage, MessageEnvelope, Rule
 
 TELEGRAM_TEXT_LIMIT = 4096
-TRUNCATION_MARKER = "\n\n… [content truncated]"
+TRUNCATION_MARKER = "\n\n… [текст сокращён]"
 
 
 def source_message_link(message: MessageEnvelope) -> str | None:
@@ -26,23 +26,23 @@ def format_copy(
     limit: int = TELEGRAM_TEXT_LIMIT,
 ) -> FormattedMessage:
     labels = ", ".join(rule.pattern for rule in matched_rules)
-    primary = matched_rules[0].pattern if matched_rules else "match"
+    primary = matched_rules[0].pattern if matched_rules else "совпадение"
     if not primary.startswith("#"):
         primary = f"#{primary.replace(' ', '_')}"
     shown_time = message.source_timestamp.astimezone(local_timezone)
-    author = message.author_name or "Unavailable"
+    author = message.author_name or "Не указан"
     link = source_message_link(message)
 
     header_lines = [
         f"<b>{escape(primary)}</b>",
         "",
-        f"<b>Source:</b> {escape(message.source_name)}",
-        f"<b>Author:</b> {escape(author)}",
-        f"<b>Time:</b> {escape(shown_time.strftime('%d %B %Y, %H:%M %Z'))}",
-        f"<b>Matched:</b> {escape(labels)}",
+        f"<b>Источник:</b> {escape(message.source_name)}",
+        f"<b>Автор:</b> {escape(author)}",
+        f"<b>Время:</b> {escape(shown_time.strftime('%d.%m.%Y, %H:%M %Z'))}",
+        f"<b>Совпадение:</b> {escape(labels)}",
         "",
     ]
-    footer = f'\n\n<a href="{escape(link, quote=True)}">Open original message</a>' if link else ""
+    footer = f'\n\n<a href="{escape(link, quote=True)}">Открыть исходное сообщение</a>' if link else ""
     prefix = "\n".join(header_lines)
     raw_body = message.text or ""
     escaped_body = escape(raw_body)
@@ -60,4 +60,3 @@ def format_copy(
             high = middle - 1
     truncated = escape(raw_body[:low]) + TRUNCATION_MARKER
     return FormattedMessage(prefix + truncated + footer)
-
