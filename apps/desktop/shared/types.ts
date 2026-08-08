@@ -41,6 +41,12 @@ export type Settings = {
   destination_peer_id: number | null
   delivery_mode: 'copy' | 'forward'
   paused: boolean
+  ai_enabled: boolean
+  ollama_base_url: string
+  ollama_model: string
+  ollama_prompt: string
+  ollama_timeout_seconds: number
+  ollama_temperature: number
 }
 
 export type MonitorSnapshot = {
@@ -62,4 +68,3 @@ declare global {
     chatrd: ChatRDDesktopApi
   }
 }
-

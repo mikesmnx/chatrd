@@ -13,6 +13,16 @@ from chatrd_worker.processor import MessageProcessor
 from fakes import FakeGateway
 
 
+class FakeSemanticMatcher:
+    def __init__(self, result: bool):
+        self.result = result
+        self.calls: list[str] = []
+
+    async def classify(self, text: str, _settings) -> bool:
+        self.calls.append(text)
+        return self.result
+
+
 def envelope(message_id: int, text: str = "release #decision") -> MessageEnvelope:
     return MessageEnvelope(
         source_peer_id=-1001,
@@ -100,3 +110,42 @@ async def test_native_forward_mode(configured) -> None:
     assert gateway.sent == []
     assert gateway.forwarded[0][:3] == (42, -1001, 6)
 
+
+@pytest.mark.parametrize(("semantic_result", "outcome"), [(True, "sent"), (False, "no_match")])
+async def test_ai_semantic_matching_without_literal_rules(
+    database, semantic_result: bool, outcome: str
+) -> None:
+    database.upsert_source(
+        peer_id=-1001,
+        enabled=True,
+        initial_scan_mode="now",
+        initial_scan_value=None,
+    )
+    database.update_settings(
+        {"ai_enabled": True, "ollama_prompt": "Отбирай сообщения о рисках."}
+    )
+    semantic = FakeSemanticMatcher(semantic_result)
+    gateway = FakeGateway()
+    processor = MessageProcessor(
+        database, gateway, account_id=7, semantic_matcher=semantic
+    )
+
+    assert await processor.process(envelope(20, "Срок релиза под угрозой")) == outcome
+    assert semantic.calls == ["Срок релиза под угрозой"]
+    assert len(gateway.sent) == int(semantic_result)
+    if semantic_result:
+        assert "ИИ" in gateway.sent[0][1].text
+
+
+async def test_literal_match_avoids_unnecessary_ai_call(configured) -> None:
+    configured.update_settings(
+        {"ai_enabled": True, "ollama_prompt": "Отбирай сообщения о рисках."}
+    )
+    semantic = FakeSemanticMatcher(False)
+    gateway = FakeGateway()
+    processor = MessageProcessor(
+        configured, gateway, account_id=7, semantic_matcher=semantic
+    )
+
+    assert await processor.process(envelope(21)) == "sent"
+    assert semantic.calls == []

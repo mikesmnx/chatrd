@@ -3,7 +3,8 @@ import type {
   AppSnapshot,
   Peer,
   Rule,
-  Source
+  Source,
+  Settings
 } from '../../shared/types'
 import { parseDesktopError, reduceMonitorEvent, validateCredentials } from './domain'
 
@@ -315,7 +316,7 @@ function Workspace({
         {page === 'sources' && <Sources snapshot={snapshot} action={action} />}
         {page === 'rules' && <Rules snapshot={snapshot} action={action} />}
         {page === 'settings' && (
-          <SettingsPage snapshot={snapshot} action={action} />
+          <SettingsPage snapshot={snapshot} action={action} onReload={onReload} />
         )}
       </main>
     </div>
@@ -333,7 +334,9 @@ function Dashboard({
 }) {
   const total = Object.values(snapshot.monitor.counts).reduce((sum, count) => sum + count, 0)
   const configured = Boolean(
-    snapshot.settings.destination_peer_id && snapshot.sources.length && snapshot.rules.length
+    snapshot.settings.destination_peer_id &&
+      snapshot.sources.length &&
+      (snapshot.rules.length || snapshot.settings.ai_enabled)
   )
   return (
     <>
@@ -363,7 +366,7 @@ function Dashboard({
 
       {!configured && (
         <div className="banner info">
-          Перед запуском выберите чат назначения, источник и добавьте правило.
+          Перед запуском выберите чат назначения, источник и добавьте правило или включите ИИ-фильтр.
         </div>
       )}
 
@@ -791,17 +794,74 @@ function Rules({
 
 function SettingsPage({
   snapshot,
-  action
+  action,
+  onReload
 }: {
   snapshot: AppSnapshot
   action: (work: () => Promise<unknown>) => Promise<void>
+  onReload: () => Promise<void>
 }) {
+  const [ollama, setOllama] = useState(() => ollamaForm(snapshot.settings))
+  const [testing, setTesting] = useState(false)
+  const [testMessage, setTestMessage] = useState('')
+  const [testStatus, setTestStatus] = useState<string | null>(null)
+  const [testError, setTestError] = useState(false)
+
+  useEffect(() => {
+    setOllama(ollamaForm(snapshot.settings))
+  }, [snapshot.settings])
+
+  function updateOllama<K extends keyof typeof ollama>(key: K, value: (typeof ollama)[K]) {
+    setOllama((current) => ({ ...current, [key]: value }))
+    setTestStatus(null)
+  }
+
+  function ollamaValues(): Partial<Settings> {
+    return {
+      ai_enabled: ollama.ai_enabled,
+      ollama_base_url: ollama.ollama_base_url,
+      ollama_model: ollama.ollama_model,
+      ollama_prompt: ollama.ollama_prompt,
+      ollama_timeout_seconds: 120,
+      ollama_temperature: 0
+    }
+  }
+
+  async function saveOllama(event: React.FormEvent) {
+    event.preventDefault()
+    setTestStatus(null)
+    await action(() =>
+      window.chatrd.call('settings.update', { values: ollamaValues() })
+    )
+  }
+
+  async function testOllama() {
+    if (!testMessage.trim()) return
+    setTesting(true)
+    setTestStatus(null)
+    setTestError(false)
+    try {
+      await window.chatrd.call('settings.update', { values: ollamaValues() })
+      const result = await window.chatrd.call<{ model: string; message: string }>(
+        'ollama.chat',
+        { message: testMessage }
+      )
+      await onReload()
+      setTestStatus(result.message)
+    } catch (caught) {
+      setTestError(true)
+      setTestStatus(parseDesktopError(caught))
+    } finally {
+      setTesting(false)
+    }
+  }
+
   return (
     <>
       <PageHeader
         eyebrow="Параметры"
         title="Настройки"
-        description="Формат отправки и сессия Telegram."
+        description="Формат отправки, локальная ИИ-фильтрация и сессия Telegram."
       />
       <section className="panel settings-panel">
         <div>
@@ -836,6 +896,81 @@ function SettingsPage({
           ))}
         </div>
       </section>
+      <form className="panel ollama-panel" onSubmit={saveOllama}>
+        <div className="panel-heading ollama-heading">
+          <div>
+            <p className="eyebrow">Локальная модель</p>
+            <h3>Ollama · gpt-oss:20b</h3>
+          </div>
+          <label className="switch labeled-switch">
+            <input
+              type="checkbox"
+              checked={ollama.ai_enabled}
+              onChange={(event) => updateOllama('ai_enabled', event.target.checked)}
+            />
+            <i />
+            <span>{ollama.ai_enabled ? 'Включено' : 'Выключено'}</span>
+          </label>
+        </div>
+
+        <div className="ollama-form-grid">
+          <Field label="Адрес сервера Ollama">
+            <input
+              type="url"
+              value={ollama.ollama_base_url}
+              onChange={(event) => updateOllama('ollama_base_url', event.target.value)}
+              placeholder="http://127.0.0.1:11434"
+              required
+              spellCheck={false}
+            />
+          </Field>
+          <Field label="Модель">
+            <input
+              value={ollama.ollama_model}
+              onChange={(event) => updateOllama('ollama_model', event.target.value)}
+              placeholder="gpt-oss:20b"
+              required
+              spellCheck={false}
+            />
+          </Field>
+        </div>
+
+        <div className="ollama-actions">
+          <button className="primary">Сохранить</button>
+        </div>
+
+        <section className="ollama-test">
+          <div>
+            <p className="eyebrow">Проверка</p>
+            <h3>Диалог с моделью</h3>
+          </div>
+          <Field label="Тестовое сообщение">
+            <textarea
+              value={testMessage}
+              onChange={(event) => {
+                setTestMessage(event.target.value)
+                setTestStatus(null)
+              }}
+              placeholder="Напишите сообщение для gpt-oss:20b"
+              maxLength={8000}
+              rows={3}
+            />
+          </Field>
+          <button
+            type="button"
+            className="secondary ollama-send"
+            disabled={testing || !testMessage.trim()}
+            onClick={() => void testOllama()}
+          >
+            {testing ? 'Ожидание ответа…' : 'Отправить'}
+          </button>
+          {testStatus && (
+            <div className={`connection-status ${testError ? 'error' : 'success'}`} role="status">
+              {testStatus}
+            </div>
+          )}
+        </section>
+      </form>
       <section className="panel danger-zone">
         <div>
           <h3>Сессия Telegram</h3>
@@ -862,6 +997,15 @@ function SettingsPage({
       </div>
     </>
   )
+}
+
+function ollamaForm(settings: Settings) {
+  return {
+    ai_enabled: settings.ai_enabled,
+    ollama_base_url: settings.ollama_base_url,
+    ollama_model: settings.ollama_model,
+    ollama_prompt: settings.ollama_prompt
+  }
 }
 
 function PageHeader({

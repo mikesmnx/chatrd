@@ -19,7 +19,7 @@
 
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 320px; min-height: 100vh; background: var(--paper); }
-button, input, select { font: inherit; }
+button, input, select, textarea { font: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: .55; }
 a { color: var(--green); }
@@ -64,8 +64,9 @@ h3 { font-size: 1.08rem; margin-bottom: 4px; }
 .step-indicator i { display: block; width: 36px; height: 1px; background: var(--line); }
 
 .field { display: grid; gap: 7px; margin-top: 19px; color: var(--ink-2); font-size: 13px; font-weight: 600; }
-input, select { width: 100%; border: 1px solid var(--line); border-radius: 10px; background: var(--white); color: var(--ink); padding: 12px 13px; outline: none; transition: border .15s, box-shadow .15s; }
-input:focus, select:focus { border-color: #4c8f80; box-shadow: 0 0 0 3px #4c8f8018; }
+input, select, textarea { width: 100%; border: 1px solid var(--line); border-radius: 10px; background: var(--white); color: var(--ink); padding: 12px 13px; outline: none; transition: border .15s, box-shadow .15s; }
+input:focus, select:focus, textarea:focus { border-color: #4c8f80; box-shadow: 0 0 0 3px #4c8f8018; }
+textarea { resize: vertical; line-height: 1.5; }
 .code-input { font-size: 28px; letter-spacing: .25em; text-align: center; }
 .form-error, .banner.error { color: #8f3024; background: #f9e5e1; border: 1px solid #edc8c1; }
 .form-error { padding: 10px 12px; border-radius: 9px; margin-top: 16px; font-size: 13px; }
@@ -176,6 +177,19 @@ button.secondary { color: var(--ink); background: var(--white); border: 1px soli
 .choice-card.selected { border-color: #75aa9c; background: #f1f8f5; }
 .choice-card input { position: absolute; width: 16px; left: 16px; top: 18px; accent-color: var(--green); }
 .choice-card span { color: var(--muted); font-size: 12px; }
+.ollama-panel { display: grid; gap: 8px; }
+.ollama-heading { align-items: flex-start; margin-bottom: 0; }
+.ollama-heading > div:first-child { max-width: 720px; }
+.labeled-switch { display: flex; align-items: center; gap: 9px; padding-top: 4px; }
+.labeled-switch span { color: var(--muted); font-size: 12px; font-weight: 700; }
+.ollama-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 18px; }
+.ollama-actions { display: flex; justify-content: flex-end; margin-top: 18px; }
+.ollama-test { display: grid; gap: 4px; margin-top: 18px; padding-top: 22px; border-top: 1px solid var(--line); }
+.ollama-test h3, .ollama-test .eyebrow { margin-bottom: 0; }
+.ollama-send { justify-self: end; margin-top: 10px; }
+.connection-status { padding: 11px 13px; border-radius: 9px; font-size: 12px; }
+.connection-status.success { white-space: pre-wrap; color: var(--ink); background: #f3f8f6; border: 1px solid #b9d8cc; line-height: 1.55; }
+.connection-status.error { color: #8f3024; background: #f9e5e1; border: 1px solid #edc8c1; }
 .danger-zone { display: flex; justify-content: space-between; align-items: center; gap: 30px; margin-top: 18px; }
 .danger-zone > div { max-width: 650px; }
 .danger-button { flex: 0 0 auto; color: #9d3b30; background: #f8e5e1; border: 1px solid #edc9c2; }
@@ -204,7 +218,8 @@ button.secondary { color: var(--ink); background: var(--white); border: 1px soli
   .content { padding: 30px 20px; }
   .onboarding { grid-template-columns: 1fr; }
   .onboarding-story { display: none; }
-  .chat-grid, .settings-panel { grid-template-columns: 1fr; }
+  .chat-grid, .settings-panel, .ollama-form-grid { grid-template-columns: 1fr; }
+  .ollama-actions .primary, .ollama-send { width: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {

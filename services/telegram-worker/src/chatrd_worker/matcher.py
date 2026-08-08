@@ -73,4 +73,3 @@ def _contains_token(haystack: str, needle: str, *, hashtag: bool) -> bool:
 
 def _is_word_character(value: str) -> bool:
     return value == "_" or value.isalnum()
-

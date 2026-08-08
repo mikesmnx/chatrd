@@ -189,13 +189,14 @@ semantics.
 - Flood-wait, offline, revoked-session, inaccessible-chat, send restriction, and
   database error handling.
 - Pause/resume control and redacted diagnostic logs.
+- Optional semantic matching through a user-configured Ollama server and model.
 - Windows and macOS packaged builds suitable for MVP evaluation.
 - Required automated unit tests and local/CI test commands.
 
 ### Explicitly excluded
 
 - Any custom backend, cloud deployment, cloud sync, or remote administration.
-- AI classification, OCR, voice transcription, or external content processing.
+- OCR, voice transcription, or managed cloud content processing.
 - Mobile, web, or Linux clients.
 - Full Telegram browsing or chat UI.
 - Regex, include/exclude logic, Boolean rule groups, sender rules, or topics.

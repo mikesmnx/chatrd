@@ -129,6 +129,11 @@ class TransientTelegramError(WorkerError):
     transient = True
 
 
+class OllamaUnavailableError(WorkerError):
+    code = "ollama_unavailable"
+    transient = True
+
+
 class PermanentTelegramError(WorkerError):
     code = "telegram_permanent"
 
@@ -139,4 +144,3 @@ class FloodWaitError(TransientTelegramError):
     def __init__(self, seconds: int):
         super().__init__(f"Telegram requested a {seconds}-second wait")
         self.seconds = seconds
-

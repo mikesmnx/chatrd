@@ -9,10 +9,57 @@ from chatrd_worker.models import RuleType, ValidationError
 
 def test_defaults_and_setting_validation(database) -> None:
     assert database.get_settings()["delivery_mode"] == "copy"
+    assert database.get_settings()["ollama_model"] == "gpt-oss:20b"
+    assert database.get_settings()["ai_enabled"] is False
     database.update_settings({"delivery_mode": "forward", "paused": False})
     assert database.get_settings()["delivery_mode"] == "forward"
     with pytest.raises(ValidationError):
         database.update_settings({"unknown": True})
+
+
+def test_ollama_settings_validation(database) -> None:
+    updated = database.update_settings(
+        {
+            "ai_enabled": True,
+            "ollama_base_url": "http://localhost:11434/",
+            "ollama_model": "gpt-oss:20b",
+            "ollama_prompt": "  Отбирай сообщения о релизах.  ",
+            "ollama_timeout_seconds": "90",
+            "ollama_temperature": "0.2",
+        }
+    )
+    assert updated["ollama_base_url"] == "http://localhost:11434"
+    assert updated["ollama_prompt"] == "Отбирай сообщения о релизах."
+    assert updated["ollama_timeout_seconds"] == 90
+    assert updated["ollama_temperature"] == 0.2
+
+
+@pytest.mark.parametrize(
+    ("values", "message"),
+    [
+        ({"ai_enabled": "yes"}, "true or false"),
+        ({"ollama_base_url": "file:///tmp/ollama"}, "HTTP or HTTPS"),
+        ({"ollama_base_url": None}, "HTTP or HTTPS"),
+        ({"ollama_base_url": "http://user:pass@localhost:11434"}, "HTTP or HTTPS"),
+        ({"ollama_model": ""}, "model is required"),
+        ({"ollama_model": None}, "model is required"),
+        ({"ollama_prompt": "x" * 4001}, "4,000"),
+        ({"ollama_prompt": None}, "must be text"),
+        ({"ollama_timeout_seconds": "fast"}, "must be a number"),
+        ({"ollama_timeout_seconds": 4}, "between 5 and 600"),
+        ({"ollama_temperature": "warm"}, "must be a number"),
+        ({"ollama_temperature": 2.1}, "between 0 and 2"),
+        ({"ollama_temperature": float("nan")}, "between 0 and 2"),
+    ],
+)
+def test_invalid_ollama_settings_are_rejected(database, values, message) -> None:
+    with pytest.raises(ValidationError, match=message):
+        database.update_settings(values)
+
+
+def test_ai_matching_requires_instructions(database) -> None:
+    with pytest.raises(ValidationError, match="instructions are required"):
+        database.update_settings({"ai_enabled": True})
 
 
 def test_sources_and_destination_cannot_overlap(database) -> None:
@@ -118,4 +165,3 @@ def test_foreign_keys_are_enabled(database) -> None:
             rule_type=RuleType.KEYWORD.value,
             pattern="missing",
         )
-

@@ -44,6 +44,7 @@ flowchart LR
     Main --> Keychain["OS credential protection<br/>Windows/macOS"]
     Worker --> SQLite[("Local SQLite")]
     Worker <-->|"MTProto only"| Telegram["Telegram"]
+    Worker -.->|"optional structured classification"| Ollama["Ollama<br/>gpt-oss:20b"]
     Main --> Logs["Rotating redacted logs"]
     Worker -->|"structured redacted events"| Logs
 ```
@@ -58,6 +59,9 @@ flowchart LR
 - The Python worker is trusted local application code. It receives credentials
   only for the active session and never prints them.
 - SQLite stores operational metadata but no source message body/caption.
+- When semantic matching is enabled, the worker sends message text to the
+  configured Ollama endpoint. The default loopback endpoint keeps that traffic
+  on the local computer; users are warned before configuring a remote endpoint.
 - Standard output is reserved for protocol frames. Human-readable logs go to
   standard error or a controlled log sink and pass through redaction.
 

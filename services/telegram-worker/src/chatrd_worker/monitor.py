@@ -6,7 +6,13 @@ from typing import Any
 
 from .database import Database
 from .gateway import TelegramGateway
-from .models import FloodWaitError, MessageEnvelope, Source, TransientTelegramError
+from .models import (
+    FloodWaitError,
+    MessageEnvelope,
+    OllamaUnavailableError,
+    Source,
+    TransientTelegramError,
+)
 from .processor import EventCallback, MessageProcessor, _no_event
 
 
@@ -158,7 +164,7 @@ class Monitor:
                     },
                 )
                 await asyncio.sleep(error.seconds)
-            except TransientTelegramError:
+            except (TransientTelegramError, OllamaUnavailableError):
                 attempt += 1
                 delay = min(60, 2**min(attempt, 6))
                 await self.emit(

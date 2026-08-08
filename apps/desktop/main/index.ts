@@ -2,6 +2,7 @@ import { join } from 'node:path'
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { SecretStore, TelegramSecret } from './secret-store'
 import { WorkerClient, WorkerRequestError } from './worker-client'
+import { sendWorkerEvent } from './window-events'
 
 const ALLOWED_METHODS = new Set([
   'system.snapshot',
@@ -13,6 +14,7 @@ const ALLOWED_METHODS = new Set([
   'chats.list',
   'settings.get',
   'settings.update',
+  'ollama.chat',
   'sources.list',
   'sources.upsert',
   'sources.remove',
@@ -37,7 +39,7 @@ const hasLock = app.requestSingleInstanceLock()
 if (!hasLock) app.quit()
 
 app.on('second-instance', () => {
-  if (!mainWindow) return
+  if (!mainWindow || mainWindow.isDestroyed()) return
   if (mainWindow.isMinimized()) mainWindow.restore()
   mainWindow.focus()
 })
@@ -62,10 +64,10 @@ app.whenReady().then(async () => {
   createWindow()
 
   worker.on('event', (event) => {
-    mainWindow?.webContents.send('worker:event', event)
+    sendWorkerEvent(mainWindow, event)
   })
   worker.on('exit', () => {
-    mainWindow?.webContents.send('worker:event', {
+    sendWorkerEvent(mainWindow, {
       event: 'worker.exit',
       payload: { code: 'worker_exited' }
     })
@@ -84,7 +86,7 @@ app.on('before-quit', (event) => {
 })
 
 function createWindow(): void {
-  mainWindow = new BrowserWindow({
+  const window = new BrowserWindow({
     width: 1180,
     height: 780,
     minWidth: 920,
@@ -99,16 +101,22 @@ function createWindow(): void {
       sandbox: true
     }
   })
-  mainWindow.once('ready-to-show', () => mainWindow?.show())
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+  mainWindow = window
+  window.once('ready-to-show', () => {
+    if (!window.isDestroyed()) window.show()
+  })
+  window.once('closed', () => {
+    if (mainWindow === window) mainWindow = null
+  })
+  window.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('https://')) void shell.openExternal(url)
     return { action: 'deny' }
   })
 
   if (process.env.ELECTRON_RENDERER_URL) {
-    void mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
+    void window.loadURL(process.env.ELECTRON_RENDERER_URL)
   } else {
-    void mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+    void window.loadFile(join(__dirname, '../renderer/index.html'))
   }
 }
 
@@ -132,7 +140,11 @@ function registerIpc(): void {
 
       let result: any
       try {
-        result = await worker.request<any>(method, payload)
+        result = await worker.request<any>(
+          method,
+          payload,
+          method === 'ollama.chat' ? 10 * 60_000 : undefined
+        )
       } catch (error) {
         throw new Error(JSON.stringify({
           code: safeErrorCode(error),

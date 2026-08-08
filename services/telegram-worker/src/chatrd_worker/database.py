@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import sqlite3
 import threading
 import uuid
@@ -9,6 +10,7 @@ from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from .matcher import validate_rule
 from .models import ProcessingOutcome, Rule, RuleType, Source, TelegramPeer, ValidationError
@@ -94,6 +96,12 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "destination_peer_id": None,
     "delivery_mode": "copy",
     "paused": True,
+    "ai_enabled": False,
+    "ollama_base_url": "http://127.0.0.1:11434",
+    "ollama_model": "gpt-oss:20b",
+    "ollama_prompt": "",
+    "ollama_timeout_seconds": 120,
+    "ollama_temperature": 0.0,
 }
 
 
@@ -150,6 +158,58 @@ class Database:
             raise ValidationError(f"Unknown setting: {sorted(unknown)[0]}")
         if "delivery_mode" in values and values["delivery_mode"] not in {"copy", "forward"}:
             raise ValidationError("Delivery mode must be copy or forward")
+        if "ai_enabled" in values and not isinstance(values["ai_enabled"], bool):
+            raise ValidationError("AI enabled must be true or false")
+        if "ollama_base_url" in values:
+            if not isinstance(values["ollama_base_url"], str):
+                raise ValidationError("Ollama URL must be a valid HTTP or HTTPS server URL")
+            base_url = values["ollama_base_url"].strip().rstrip("/")
+            parsed = urlparse(base_url)
+            if (
+                parsed.scheme not in {"http", "https"}
+                or not parsed.hostname
+                or parsed.username
+                or parsed.password
+                or parsed.query
+                or parsed.fragment
+                or len(base_url) > 2048
+            ):
+                raise ValidationError("Ollama URL must be a valid HTTP or HTTPS server URL")
+            values["ollama_base_url"] = base_url
+        if "ollama_model" in values:
+            if not isinstance(values["ollama_model"], str):
+                raise ValidationError("Ollama model is required and cannot exceed 128 characters")
+            model = values["ollama_model"].strip()
+            if not model or len(model) > 128:
+                raise ValidationError("Ollama model is required and cannot exceed 128 characters")
+            values["ollama_model"] = model
+        if "ollama_prompt" in values:
+            if not isinstance(values["ollama_prompt"], str):
+                raise ValidationError("Ollama instructions must be text")
+            prompt = values["ollama_prompt"].strip()
+            if len(prompt) > 4000:
+                raise ValidationError("Ollama instructions cannot exceed 4,000 characters")
+            values["ollama_prompt"] = prompt
+        if "ollama_timeout_seconds" in values:
+            try:
+                if isinstance(values["ollama_timeout_seconds"], bool):
+                    raise ValueError
+                timeout = int(values["ollama_timeout_seconds"])
+            except (TypeError, ValueError) as error:
+                raise ValidationError("Ollama timeout must be a number") from error
+            if timeout < 5 or timeout > 600:
+                raise ValidationError("Ollama timeout must be between 5 and 600 seconds")
+            values["ollama_timeout_seconds"] = timeout
+        if "ollama_temperature" in values:
+            try:
+                if isinstance(values["ollama_temperature"], bool):
+                    raise ValueError
+                temperature = float(values["ollama_temperature"])
+            except (TypeError, ValueError) as error:
+                raise ValidationError("Ollama temperature must be a number") from error
+            if not math.isfinite(temperature) or temperature < 0 or temperature > 2:
+                raise ValidationError("Ollama temperature must be between 0 and 2")
+            values["ollama_temperature"] = temperature
         if "destination_peer_id" in values and values["destination_peer_id"] is not None:
             destination = int(values["destination_peer_id"])
             with self._lock:
@@ -164,6 +224,10 @@ class Database:
             if peer is None or not bool(peer["can_write"]):
                 raise ValidationError("Destination must be an available writable chat")
             values["destination_peer_id"] = destination
+        resulting = self.get_settings()
+        resulting.update(values)
+        if resulting["ai_enabled"] and not resulting["ollama_prompt"]:
+            raise ValidationError("Ollama instructions are required when AI matching is enabled")
         now = utc_now()
         with self.transaction() as connection:
             for key, value in values.items():

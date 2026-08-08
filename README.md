@@ -1,10 +1,12 @@
 # ChatRD
 
 ChatRD is a local Windows and macOS desktop application that signs in with a
-personal Telegram account, watches selected chats, matches literal rules, and
+personal Telegram account, watches selected chats, matches literal rules or an
+optional local Ollama semantic filter, and
 copies or forwards matching messages to one summary chat.
 
-Message matching and operational state stay on the user's computer. The
+Message matching and operational state stay on the user's computer when Ollama
+uses its default local address. The
 application has no custom backend, telemetry, cloud sync, or message-body
 logging.
 
@@ -21,6 +23,9 @@ The initial MVP implementation includes:
 - Start-now, latest-N, and recent-hours initial scans.
 - Global and per-source keyword, phrase, and hashtag rules.
 - Unicode-aware case-insensitive and whole-word matching.
+- Optional semantic matching through Ollama with `gpt-oss:20b`, structured
+  boolean output, configurable instructions and endpoint, and deterministic
+  internal generation defaults.
 - Text and media-caption processing.
 - Ordered catch-up, buffered live hand-off, and live monitoring.
 - SQLite migrations, per-source cursors, and processing deduplication.
@@ -44,6 +49,7 @@ Electron main process
     │ versioned newline-delimited JSON over stdin/stdout
 Python worker
     ├── Telethon ── MTProto ── Telegram
+    ├── Ollama ── gpt-oss:20b (optional)
     └── SQLite
 ```
 
@@ -64,6 +70,7 @@ Detailed documents:
 - Windows 10/11 or a currently supported macOS version.
 - A Telegram API ID and API hash from
   [my.telegram.org/apps](https://my.telegram.org/apps).
+- Optional: Ollama and enough memory to run `gpt-oss:20b` locally.
 
 Use a dedicated non-production Telegram account during development whenever
 possible.
@@ -74,6 +81,16 @@ possible.
 npm install
 python -m pip install -e "services/telegram-worker[dev,build]"
 ```
+
+To enable semantic matching, install Ollama and download the model:
+
+```powershell
+ollama pull gpt-oss:20b
+```
+
+Then open **Настройки → Ollama**, enter the selection instructions, send a test
+message to verify the model, and enable the filter. The default server address is
+`http://127.0.0.1:11434`.
 
 No Telegram credentials belong in source files, environment templates, test
 fixtures, commits, or CI secrets.
@@ -166,12 +183,17 @@ recreating every rule.
 ## Rule semantics
 
 - Rules are OR-combined.
+- When the Ollama filter is enabled, messages that do not match a literal rule
+  are classified against the configured instructions. A positive AI result is
+  an additional OR match; literal matches do not invoke the model.
 - Case-insensitive matching uses Unicode NFC normalization and case folding.
 - Keywords are literal substrings unless whole-word mode is enabled.
 - Phrases are literal contiguous strings, not regular expressions.
 - Hashtags must be complete hashtag tokens.
 - Text and media captions are evaluated.
 - One source message produces at most one delivery even if several rules match.
+- AI failures are retried without marking a message as processed. Setting a
+  non-local Ollama URL sends message text to that server.
 - Edited messages, quoted content, OCR, voice transcription, and regex are not
   part of the MVP.
 
@@ -187,4 +209,3 @@ recreating every rule.
   application icon.
 - Desktop E2E automation remains a later phase; unit/integration tests and a
   packaged startup smoke test are currently the release checks.
-

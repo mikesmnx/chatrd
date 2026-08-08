@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, Protocol
 
 from .database import Database
 from .formatter import format_copy
@@ -11,14 +11,22 @@ from .idempotency import delivery_random_id
 from .matcher import match_message
 from .models import (
     FloodWaitError,
+    MatchResult,
     MessageEnvelope,
     PermanentTelegramError,
+    Rule,
+    RuleType,
     TERMINAL_OUTCOMES,
     TransientTelegramError,
     ValidationError,
 )
+from .ollama import OllamaClient
 
 EventCallback = Callable[[str, dict[str, Any]], Awaitable[None]]
+
+
+class SemanticMatcher(Protocol):
+    async def classify(self, text: str, settings: dict[str, Any]) -> bool: ...
 
 
 async def _no_event(_name: str, _payload: dict[str, Any]) -> None:
@@ -33,11 +41,13 @@ class MessageProcessor:
         *,
         account_id: int,
         emit: EventCallback = _no_event,
+        semantic_matcher: SemanticMatcher | None = None,
     ):
         self.database = database
         self.gateway = gateway
         self.account_id = account_id
         self.emit = emit
+        self.semantic_matcher = semantic_matcher or OllamaClient()
         self._source_locks: dict[int, asyncio.Lock] = {}
 
     async def process(self, message: MessageEnvelope) -> str:
@@ -53,6 +63,23 @@ class MessageProcessor:
 
             rules = self.database.list_rules(message.source_peer_id)
             match = match_message(message.text, rules)
+            settings = self.database.get_settings()
+            if (
+                not match.matched
+                and settings["ai_enabled"]
+                and message.text
+                and await self.semantic_matcher.classify(message.text, settings)
+            ):
+                match = MatchResult(
+                    matched_rules=(
+                        Rule(
+                            id="ollama-semantic-match",
+                            source_peer_id=None,
+                            type=RuleType.PHRASE,
+                            pattern="ИИ",
+                        ),
+                    )
+                )
             if not match.matched and existing is None:
                 self.database.record_no_match(
                     message.source_peer_id,
@@ -65,7 +92,6 @@ class MessageProcessor:
                 )
                 return "no_match"
 
-            settings = self.database.get_settings()
             destination = settings["destination_peer_id"]
             if destination is None:
                 raise ValidationError("Choose a destination chat before monitoring")
@@ -127,4 +153,3 @@ class MessageProcessor:
                 {"source_peer_id": message.source_peer_id, "outcome": "sent"},
             )
             return "sent"
-

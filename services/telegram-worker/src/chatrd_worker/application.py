@@ -7,6 +7,7 @@ from . import __version__
 from .database import Database
 from .models import AuthenticationRequired, ValidationError
 from .monitor import Monitor
+from .ollama import OllamaClient
 from .processor import EventCallback, MessageProcessor, _no_event
 from .telethon_gateway import TelethonGateway
 
@@ -35,6 +36,7 @@ class WorkerApplication:
             "chats.list": self._chats_list,
             "settings.get": self._settings_get,
             "settings.update": self._settings_update,
+            "ollama.chat": self._ollama_chat,
             "sources.list": self._sources_list,
             "sources.upsert": self._sources_upsert,
             "sources.remove": self._sources_remove,
@@ -158,6 +160,12 @@ class WorkerApplication:
             values["destination_peer_id"] = destination
         return self.database.update_settings(values)
 
+    async def _ollama_chat(self, payload: dict[str, Any]) -> dict[str, str]:
+        message = payload.get("message")
+        if not isinstance(message, str):
+            raise ValidationError("Ollama test message is required")
+        return await OllamaClient().chat(message, self.database.get_settings())
+
     async def _sources_list(self, _payload: dict[str, Any]) -> list[dict[str, Any]]:
         return [source.to_dict() for source in self.database.list_sources()]
 
@@ -211,8 +219,11 @@ class WorkerApplication:
     async def _monitor_start(self, _payload: dict[str, Any]) -> dict[str, Any]:
         if not self.database.list_sources():
             raise ValidationError("Choose at least one source chat")
-        if not any(rule.enabled for rule in self.database.list_rules()):
-            raise ValidationError("Create at least one enabled rule")
+        settings = self.database.get_settings()
+        if not any(rule.enabled for rule in self.database.list_rules()) and not settings[
+            "ai_enabled"
+        ]:
+            raise ValidationError("Create at least one enabled rule or enable AI matching")
         monitor = await self._require_monitor()
         return await monitor.start()
 

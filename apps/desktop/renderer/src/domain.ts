@@ -83,7 +83,8 @@ const ERROR_CODE_MESSAGES: Record<string, string> = {
   frame_too_large: 'Запрос слишком большой.',
   method_not_allowed: 'Это действие недоступно.',
   invalid_request: 'Некорректный запрос.',
-  desktop_error: 'Ошибка приложения.'
+  desktop_error: 'Ошибка приложения.',
+  ollama_unavailable: 'Ollama недоступна или вернула некорректный ответ. Проверьте адрес, модель и запущенный сервер.'
 }
 
 const WORKER_MESSAGE_TRANSLATIONS: Record<string, string> = {
@@ -103,6 +104,18 @@ const WORKER_MESSAGE_TRANSLATIONS: Record<string, string> = {
   'Rule ID and values are required': 'Не указаны данные правила.',
   'Choose at least one source chat': 'Выберите хотя бы один источник.',
   'Create at least one enabled rule': 'Добавьте хотя бы одно включённое правило.',
+  'Create at least one enabled rule or enable AI matching': 'Добавьте правило или включите ИИ-фильтр.',
+  'Ollama URL must be a valid HTTP or HTTPS server URL': 'Введите корректный HTTP- или HTTPS-адрес сервера Ollama.',
+  'Ollama model is required and cannot exceed 128 characters': 'Укажите модель Ollama (не более 128 символов).',
+  'Ollama instructions cannot exceed 4,000 characters': 'Инструкция Ollama не должна превышать 4 000 символов.',
+  'Ollama instructions must be text': 'Инструкция Ollama должна быть текстом.',
+  'Ollama instructions are required when AI matching is enabled': 'Добавьте инструкцию отбора перед включением ИИ-фильтра.',
+  'Ollama timeout must be a number': 'Тайм-аут Ollama должен быть числом.',
+  'Ollama timeout must be between 5 and 600 seconds': 'Тайм-аут Ollama должен быть от 5 до 600 секунд.',
+  'Ollama temperature must be a number': 'Температура Ollama должна быть числом.',
+  'Ollama temperature must be between 0 and 2': 'Температура Ollama должна быть от 0 до 2.',
+  'Ollama test message is required': 'Введите тестовое сообщение для Ollama.',
+  'Ollama test message cannot exceed 8,000 characters': 'Тестовое сообщение не должно превышать 8 000 символов.',
   'Start Telegram sign-in first': 'Сначала начните вход в Telegram.',
   'Rule pattern cannot be empty': 'Текст правила не может быть пустым.',
   'Rule pattern cannot exceed 256 characters': 'Текст правила не может быть длиннее 256 символов.',
