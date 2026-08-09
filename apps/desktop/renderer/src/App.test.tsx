@@ -85,3 +85,76 @@ describe('Ollama settings', () => {
     })
   })
 })
+
+describe('Testing area', () => {
+  const testingSnapshot: AppSnapshot = {
+    ...snapshot,
+    sources: [
+      {
+        peer_id: -1001,
+        display_name: 'Команда продукта',
+        enabled: true,
+        initial_scan_mode: 'now',
+        initial_scan_value: null,
+        last_terminal_message_id: null,
+        error_code: null
+      }
+    ],
+    rules: [
+      {
+        id: 'release-rule',
+        source_peer_id: null,
+        type: 'keyword',
+        pattern: 'релиз',
+        case_sensitive: false,
+        whole_word: false,
+        enabled: true
+      }
+    ]
+  }
+  const call = vi.fn(async (method: string) => {
+    if (method === 'system.snapshot') return testingSnapshot
+    if (method === 'testing.evaluate') {
+      return {
+        source_peer_id: -1001,
+        source_enabled: true,
+        destination_peer_id: 42,
+        delivery_mode: 'copy',
+        matched: true,
+        would_send: true,
+        reason: 'matched_rules',
+        evaluated_rules: [
+          { ...testingSnapshot.rules[0], matched: true }
+        ]
+      }
+    }
+    return { ok: true }
+  })
+
+  beforeEach(() => {
+    call.mockClear()
+    const api: ChatRDDesktopApi = {
+      call: call as unknown as ChatRDDesktopApi['call'],
+      onWorkerEvent: () => () => undefined,
+      platform: 'win32'
+    }
+    Object.defineProperty(window, 'chatrd', { configurable: true, value: api })
+  })
+
+  it('submits a mock message and shows the matching decision', async () => {
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Тестирование' }))
+    fireEvent.change(screen.getByLabelText('Сообщение'), {
+      target: { value: 'Готовим релиз' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Отправить тест' }))
+
+    expect(await screen.findByText('Будет отправлено в итоговый чат')).toBeInTheDocument()
+    expect(screen.getByText('Сработало')).toBeInTheDocument()
+    expect(call).toHaveBeenCalledWith('testing.evaluate', {
+      source_peer_id: -1001,
+      message: 'Готовим релиз'
+    })
+    expect(call).not.toHaveBeenCalledWith(expect.stringMatching(/send|forward/), expect.anything())
+  })
+})

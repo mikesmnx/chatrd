@@ -4,11 +4,12 @@ import type {
   Peer,
   Rule,
   Source,
-  Settings
+  Settings,
+  TestingEvaluation
 } from '../../shared/types'
 import { parseDesktopError, reduceMonitorEvent, validateCredentials } from './domain'
 
-type Page = 'dashboard' | 'sources' | 'rules' | 'settings'
+type Page = 'dashboard' | 'sources' | 'rules' | 'testing' | 'settings'
 
 export function App() {
   const [snapshot, setSnapshot] = useState<AppSnapshot | null>(null)
@@ -295,6 +296,9 @@ function Workspace({
           <NavButton icon="✦" active={page === 'rules'} onClick={() => setPage('rules')}>
             Правила
           </NavButton>
+          <NavButton icon="◇" active={page === 'testing'} onClick={() => setPage('testing')}>
+            Тестирование
+          </NavButton>
           <NavButton icon="⚙" active={page === 'settings'} onClick={() => setPage('settings')}>
             Настройки
           </NavButton>
@@ -315,6 +319,7 @@ function Workspace({
         )}
         {page === 'sources' && <Sources snapshot={snapshot} action={action} />}
         {page === 'rules' && <Rules snapshot={snapshot} action={action} />}
+        {page === 'testing' && <TestingPage snapshot={snapshot} />}
         {page === 'settings' && (
           <SettingsPage snapshot={snapshot} action={action} onReload={onReload} />
         )}
@@ -792,6 +797,159 @@ function Rules({
   )
 }
 
+function TestingPage({ snapshot }: { snapshot: AppSnapshot }) {
+  const [sourcePeerId, setSourcePeerId] = useState(
+    snapshot.sources[0] ? String(snapshot.sources[0].peer_id) : ''
+  )
+  const [message, setMessage] = useState('')
+  const [result, setResult] = useState<TestingEvaluation | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function evaluate(event: React.FormEvent) {
+    event.preventDefault()
+    if (!sourcePeerId || !message.trim()) return
+    setBusy(true)
+    setError(null)
+    setResult(null)
+    try {
+      const evaluation = await window.chatrd.call<TestingEvaluation>('testing.evaluate', {
+        source_peer_id: Number(sourcePeerId),
+        message
+      })
+      setResult(evaluation)
+    } catch (caught) {
+      setError(parseDesktopError(caught))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <>
+      <PageHeader
+        eyebrow="Проверка правил"
+        title="Тестирование"
+        description="Проверьте, какие правила сработают для сообщения из выбранного источника. Сообщение никуда не отправляется и не сохраняется."
+      />
+      <section className="testing-layout">
+        <form className="panel testing-composer" onSubmit={evaluate}>
+          <div className="panel-heading">
+            <div>
+              <p className="eyebrow">Тестовое сообщение</p>
+              <h3>Составить сообщение</h3>
+            </div>
+            <span className="pill">Без отправки</span>
+          </div>
+          {snapshot.sources.length === 0 ? (
+            <Empty
+              title="Нет источников"
+              text="Сначала добавьте хотя бы один чат на странице «Источники»."
+            />
+          ) : (
+            <>
+              <Field label="Источник">
+                <select
+                  value={sourcePeerId}
+                  onChange={(event) => {
+                    setSourcePeerId(event.target.value)
+                    setResult(null)
+                  }}
+                >
+                  {snapshot.sources.map((source) => (
+                    <option key={source.peer_id} value={source.peer_id}>
+                      {source.display_name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Сообщение">
+                <textarea
+                  value={message}
+                  onChange={(event) => {
+                    setMessage(event.target.value)
+                    setResult(null)
+                  }}
+                  placeholder="Введите текст сообщения или подпись к медиа…"
+                  rows={9}
+                  maxLength={8000}
+                />
+              </Field>
+              <FormError message={error} />
+              <button className="primary wide" disabled={busy || !message.trim()}>
+                {busy ? 'Проверка…' : 'Отправить тест'}
+              </button>
+            </>
+          )}
+        </form>
+
+        <section className="panel testing-result" aria-live="polite">
+          {!result ? (
+            <Empty
+              title="Результат появится здесь"
+              text="Выберите источник, введите сообщение и запустите проверку."
+            />
+          ) : (
+            <>
+              <div className={`testing-decision ${result.would_send ? 'send' : 'skip'}`}>
+                <span aria-hidden="true">{result.would_send ? '✓' : '×'}</span>
+                <div>
+                  <p className="eyebrow">Результат</p>
+                  <h2>{testingDecisionTitle(result)}</h2>
+                  <p>{testingDecisionDescription(result)}</p>
+                </div>
+              </div>
+              <div className="testing-rule-summary">
+                <strong>
+                  {formatCount(
+                    result.evaluated_rules.filter((rule) => rule.matched).length,
+                    ['сработало', 'сработали', 'сработали']
+                  )}
+                </strong>
+                <span>
+                  из {formatCount(result.evaluated_rules.length, ['правила', 'правил', 'правил'])}
+                </span>
+              </div>
+              {result.evaluated_rules.length === 0 ? (
+                <Empty
+                  title="Нет применимых правил"
+                  text="Для этого источника нет включённых глобальных или локальных правил."
+                />
+              ) : (
+                <div className="testing-rule-list">
+                  {result.evaluated_rules.map((rule) => {
+                    const source = snapshot.sources.find(
+                      (item) => item.peer_id === rule.source_peer_id
+                    )
+                    return (
+                      <div className={`testing-rule ${rule.matched ? 'matched' : ''}`} key={rule.id}>
+                        <span className="testing-rule-mark" aria-hidden="true">
+                          {rule.matched ? '✓' : '–'}
+                        </span>
+                        <div className="grow">
+                          <strong>{rule.pattern}</strong>
+                          <span>
+                            {source?.display_name ?? 'Все источники'} · {ruleTypeLabel(rule.type)}
+                            {rule.whole_word ? ' · целое слово' : ''}
+                            {rule.case_sensitive ? ' · с учётом регистра' : ''}
+                          </span>
+                        </div>
+                        <span className={`pill ${rule.matched ? 'ok' : ''}`}>
+                          {rule.matched ? 'Сработало' : 'Не сработало'}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </>
+          )}
+        </section>
+      </section>
+    </>
+  )
+}
+
 function SettingsPage({
   snapshot,
   action,
@@ -1061,7 +1219,7 @@ function NavButton({
 }) {
   return (
     <button className={active ? 'active' : ''} onClick={onClick}>
-      <span>{icon}</span>
+      <span aria-hidden="true">{icon}</span>
       {children}
     </button>
   )
@@ -1100,6 +1258,28 @@ function ruleTypeLabel(type: Rule['type']): string {
     phrase: 'Фраза',
     hashtag: 'Хэштег'
   }[type]
+}
+
+function testingDecisionTitle(result: TestingEvaluation): string {
+  if (result.would_send) return 'Будет отправлено в итоговый чат'
+  if (result.reason === 'destination_missing') return 'Правила сработали, но отправка невозможна'
+  if (result.reason === 'source_disabled') return 'Источник выключен'
+  return 'Не будет отправлено в итоговый чат'
+}
+
+function testingDecisionDescription(result: TestingEvaluation): string {
+  if (result.would_send) {
+    return result.delivery_mode === 'forward'
+      ? 'При работающем мониторинге Telegram перешлёт исходное сообщение.'
+      : 'При работающем мониторинге ChatRD отправит форматированную копию.'
+  }
+  if (result.reason === 'destination_missing') {
+    return 'Выберите итоговый чат на странице «Источники».'
+  }
+  if (result.reason === 'source_disabled') {
+    return 'Сообщения из выключенного источника не обрабатываются.'
+  }
+  return 'Ни одно включённое правило для этого источника не совпало.'
 }
 
 function peerTypeLabel(type: string): string {

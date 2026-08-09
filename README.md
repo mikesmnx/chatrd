@@ -23,6 +23,7 @@ The initial MVP implementation includes:
 - Start-now, latest-N, and recent-hours initial scans.
 - Global and per-source keyword, phrase, and hashtag rules.
 - Unicode-aware case-insensitive and whole-word matching.
+- Side-effect-free testing area for previewing applicable and matched rules.
 - Optional semantic matching through Ollama with `gpt-oss:20b`, structured
   boolean output, configurable instructions and endpoint, and deterministic
   internal generation defaults.
@@ -113,7 +114,8 @@ During onboarding:
 4. Select a writable destination, such as Saved Messages.
 5. Select source chats and their initial scan policies.
 6. Add at least one rule.
-7. Start monitoring from the dashboard.
+7. Optionally test a composed message against the rules without sending it.
+8. Start monitoring from the dashboard.
 
 The login code and 2FA password are not stored. The API hash and serialized
 Telegram authorization are encrypted at rest with Electron's `safeStorage`,

@@ -171,6 +171,27 @@ button.secondary { color: var(--ink); background: var(--white); border: 1px soli
 .icon-button:hover { background: #f6e4e0; }
 .danger-text { color: var(--coral); }
 
+.testing-layout { display: grid; grid-template-columns: minmax(320px, .9fr) minmax(420px, 1.1fr); gap: 18px; align-items: start; }
+.testing-layout .panel { margin-top: 0; }
+.testing-composer textarea { min-height: 190px; }
+.testing-result { min-height: 430px; }
+.testing-decision { display: flex; align-items: flex-start; gap: 16px; padding: 20px; border-radius: 14px; background: #f5f0e7; border: 1px solid #e5d9c3; }
+.testing-decision > span { display: grid; place-items: center; flex: 0 0 40px; height: 40px; border-radius: 50%; color: #8b6530; background: #eadcc2; font-size: 20px; font-weight: 700; }
+.testing-decision.send { background: #eff7f4; border-color: #b9d8cc; }
+.testing-decision.send > span { color: var(--green); background: var(--mint); }
+.testing-decision h2 { margin-bottom: 7px; font-size: 1.4rem; }
+.testing-decision p:last-child { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.testing-rule-summary { display: flex; align-items: baseline; gap: 6px; margin: 24px 0 10px; }
+.testing-rule-summary strong { font-size: 1.05rem; }
+.testing-rule-summary span { color: var(--muted); font-size: 12px; }
+.testing-rule-list { display: grid; }
+.testing-rule { display: flex; align-items: center; gap: 11px; padding: 13px 2px; border-top: 1px solid #ebebe6; }
+.testing-rule:first-child { border-top: 0; }
+.testing-rule .grow { display: grid; gap: 3px; }
+.testing-rule .grow span { color: var(--muted); font-size: 11px; }
+.testing-rule-mark { display: grid; place-items: center; flex: 0 0 30px; height: 30px; border-radius: 9px; color: #8a9592; background: #eef0ed; font-weight: 700; }
+.testing-rule.matched .testing-rule-mark { color: var(--green); background: var(--mint); }
+
 .settings-panel { display: grid; grid-template-columns: 1fr 1.2fr; gap: 40px; }
 .choice-grid { display: grid; gap: 10px; }
 .choice-card { position: relative; display: grid; gap: 4px; padding: 15px 15px 15px 44px; border: 1px solid var(--line); border-radius: 12px; cursor: pointer; }
@@ -204,6 +225,7 @@ button.secondary { color: var(--ink); background: var(--white); border: 1px soli
 @media (max-width: 1000px) {
   .stats-grid { grid-template-columns: repeat(2, 1fr); }
   .rule-layout { grid-template-columns: 1fr; }
+  .testing-layout { grid-template-columns: 1fr; }
   .onboarding { grid-template-columns: 38% 1fr; }
   .onboarding-story { padding: 40px 30px; }
 }

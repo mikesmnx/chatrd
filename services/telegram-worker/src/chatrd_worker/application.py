@@ -5,6 +5,7 @@ from typing import Any
 
 from . import __version__
 from .database import Database
+from .matcher import match_message
 from .models import AuthenticationRequired, ValidationError
 from .monitor import Monitor
 from .ollama import OllamaClient
@@ -44,6 +45,7 @@ class WorkerApplication:
             "rules.create": self._rules_create,
             "rules.update": self._rules_update,
             "rules.delete": self._rules_delete,
+            "testing.evaluate": self._testing_evaluate,
             "monitor.start": self._monitor_start,
             "monitor.pause": self._monitor_pause,
             "monitor.status": self._monitor_status,
@@ -216,6 +218,59 @@ class WorkerApplication:
         self.database.delete_rule(str(payload["id"]))
         return {"ok": True}
 
+    async def _testing_evaluate(self, payload: dict[str, Any]) -> dict[str, Any]:
+        source_peer_id = _positive_or_negative_int(
+            payload.get("source_peer_id"), "Source chat"
+        )
+        source = next(
+            (
+                item
+                for item in self.database.list_sources()
+                if item.peer_id == source_peer_id
+            ),
+            None,
+        )
+        if source is None:
+            raise ValidationError("Choose a configured source chat")
+
+        message = payload.get("message")
+        if not isinstance(message, str) or not message.strip():
+            raise ValidationError("Test message is required")
+        if len(message) > 8_000:
+            raise ValidationError("Test message cannot exceed 8,000 characters")
+
+        rules = [
+            rule for rule in self.database.list_rules(source_peer_id) if rule.enabled
+        ]
+        result = match_message(message, rules)
+        matched_rule_ids = {rule.id for rule in result.matched_rules}
+        settings = self.database.get_settings()
+        destination_configured = settings["destination_peer_id"] is not None
+        would_send = result.matched and source.enabled and destination_configured
+
+        if not result.matched:
+            reason = "no_match"
+        elif not source.enabled:
+            reason = "source_disabled"
+        elif not destination_configured:
+            reason = "destination_missing"
+        else:
+            reason = "matched_rules"
+
+        return {
+            "source_peer_id": source_peer_id,
+            "source_enabled": source.enabled,
+            "destination_peer_id": settings["destination_peer_id"],
+            "delivery_mode": settings["delivery_mode"],
+            "matched": result.matched,
+            "would_send": would_send,
+            "reason": reason,
+            "evaluated_rules": [
+                {**rule.to_dict(), "matched": rule.id in matched_rule_ids}
+                for rule in rules
+            ],
+        }
+
     async def _monitor_start(self, _payload: dict[str, Any]) -> dict[str, Any]:
         if not self.database.list_sources():
             raise ValidationError("Choose at least one source chat")
@@ -308,4 +363,14 @@ def _positive_int(value: Any, label: str) -> int:
         raise ValidationError(f"{label} must be a number") from error
     if parsed <= 0:
         raise ValidationError(f"{label} must be positive")
+    return parsed
+
+
+def _positive_or_negative_int(value: Any, label: str) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as error:
+        raise ValidationError(f"{label} must be a number") from error
+    if parsed == 0:
+        raise ValidationError(f"{label} cannot be zero")
     return parsed

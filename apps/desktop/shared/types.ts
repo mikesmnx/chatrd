@@ -37,6 +37,21 @@ export type Rule = {
   enabled: boolean
 }
 
+export type EvaluatedRule = Rule & {
+  matched: boolean
+}
+
+export type TestingEvaluation = {
+  source_peer_id: number
+  source_enabled: boolean
+  destination_peer_id: number | null
+  delivery_mode: 'copy' | 'forward'
+  matched: boolean
+  would_send: boolean
+  reason: 'matched_rules' | 'no_match' | 'source_disabled' | 'destination_missing'
+  evaluated_rules: EvaluatedRule[]
+}
+
 export type Settings = {
   destination_peer_id: number | null
   delivery_mode: 'copy' | 'forward'

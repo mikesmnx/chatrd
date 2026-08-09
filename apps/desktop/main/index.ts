@@ -22,6 +22,7 @@ const ALLOWED_METHODS = new Set([
   'rules.create',
   'rules.update',
   'rules.delete',
+  'testing.evaluate',
   'monitor.start',
   'monitor.pause',
   'monitor.status',
