@@ -19,6 +19,7 @@ const snapshot: AppSnapshot = {
   },
   sources: [],
   rules: [],
+  ai_rules: [],
   monitor: { state: 'paused', counts: {} }
 }
 
@@ -60,10 +61,8 @@ describe('Ollama settings', () => {
     await waitFor(() =>
       expect(call).toHaveBeenCalledWith('settings.update', {
         values: {
-          ai_enabled: false,
           ollama_base_url: 'http://localhost:11434',
           ollama_model: 'gpt-oss:20b',
-          ollama_prompt: '',
           ollama_timeout_seconds: 120,
           ollama_temperature: 0
         }
@@ -83,6 +82,85 @@ describe('Ollama settings', () => {
     expect(call).toHaveBeenCalledWith('ollama.chat', {
       message: 'Привет, Ollama'
     })
+  })
+})
+
+describe('AI rules', () => {
+  const call = vi.fn(async (method: string) => {
+    if (method === 'system.snapshot') return snapshot
+    return { ok: true }
+  })
+
+  beforeEach(() => {
+    call.mockClear()
+    const api: ChatRDDesktopApi = {
+      call: call as unknown as ChatRDDesktopApi['call'],
+      onWorkerEvent: () => () => undefined,
+      platform: 'win32'
+    }
+    Object.defineProperty(window, 'chatrd', { configurable: true, value: api })
+  })
+
+  it('creates a forwarded-only AI rule by default', async () => {
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'ИИ-правила' }))
+    fireEvent.change(screen.getByLabelText('Промпт классификации'), {
+      target: { value: 'Отбирай сообщения о рисках' }
+    })
+    fireEvent.change(screen.getByLabelText('Промпт действия'), {
+      target: { value: 'Сделай краткое резюме' }
+    })
+    expect(screen.getByLabelText('Когда применять')).toHaveValue('forwarded')
+    fireEvent.click(screen.getByRole('button', { name: 'Добавить' }))
+
+    await waitFor(() =>
+      expect(call).toHaveBeenCalledWith('aiRules.create', {
+        prompt: 'Отбирай сообщения о рисках',
+        action_prompt: 'Сделай краткое резюме',
+        apply_to: 'forwarded'
+      })
+    )
+  })
+
+  it('edits both prompts and the application selector', async () => {
+    const editableRule = {
+      id: 'editable-ai-rule',
+      prompt: 'Старый фильтр',
+      action_prompt: 'Старое действие',
+      apply_to: 'forwarded' as const,
+      enabled: true
+    }
+    call.mockImplementation(async (method: string) => {
+      if (method === 'system.snapshot') {
+        return { ...snapshot, ai_rules: [editableRule] }
+      }
+      return { ok: true }
+    })
+
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'ИИ-правила' }))
+    fireEvent.click(screen.getByRole('button', { name: /Изменить ИИ-правило/ }))
+    fireEvent.change(screen.getByLabelText('Промпт классификации'), {
+      target: { value: 'Новый фильтр' }
+    })
+    fireEvent.change(screen.getByLabelText('Промпт действия'), {
+      target: { value: 'Новое действие' }
+    })
+    fireEvent.change(screen.getByLabelText('Когда применять'), {
+      target: { value: 'all' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }))
+
+    await waitFor(() =>
+      expect(call).toHaveBeenCalledWith('aiRules.update', {
+        id: 'editable-ai-rule',
+        values: {
+          prompt: 'Новый фильтр',
+          action_prompt: 'Новое действие',
+          apply_to: 'all'
+        }
+      })
+    )
   })
 })
 
@@ -110,6 +188,15 @@ describe('Testing area', () => {
         whole_word: false,
         enabled: true
       }
+    ],
+    ai_rules: [
+      {
+        id: 'risk-ai-rule',
+        prompt: 'Отбирай сообщения о рисках',
+        action_prompt: 'Сделай краткое резюме',
+        apply_to: 'forwarded',
+        enabled: true
+      }
     ]
   }
   const call = vi.fn(async (method: string) => {
@@ -118,13 +205,23 @@ describe('Testing area', () => {
       return {
         source_peer_id: -1001,
         source_enabled: true,
+        message_is_forwarded: true,
         destination_peer_id: 42,
         delivery_mode: 'copy',
         matched: true,
         would_send: true,
+        copy_preview_html: '<b>#релиз</b>\n\nГотовим релиз\n\n<b>Дополнение ИИ:</b> Краткое резюме риска',
         reason: 'matched_rules',
         evaluated_rules: [
           { ...testingSnapshot.rules[0], matched: true }
+        ],
+        evaluated_ai_rules: [
+          {
+            ...testingSnapshot.ai_rules[0],
+            applicable: true,
+            matched: true,
+            action_result: 'Краткое резюме риска'
+          }
         ]
       }
     }
@@ -150,10 +247,16 @@ describe('Testing area', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Отправить тест' }))
 
     expect(await screen.findByText('Будет отправлено в итоговый чат')).toBeInTheDocument()
-    expect(screen.getByText('Сработало')).toBeInTheDocument()
+    expect(screen.getAllByText('Сработало')).toHaveLength(2)
+    expect(screen.getByText('Отбирай сообщения о рисках')).toBeInTheDocument()
+    expect(screen.getAllByText(/Краткое резюме риска/)).toHaveLength(2)
+    expect(screen.getByLabelText('Предпросмотр сообщения в чате назначения')).toHaveTextContent(
+      'Готовим релиз'
+    )
     expect(call).toHaveBeenCalledWith('testing.evaluate', {
       source_peer_id: -1001,
-      message: 'Готовим релиз'
+      message: 'Готовим релиз',
+      is_forwarded: true
     })
     expect(call).not.toHaveBeenCalledWith(expect.stringMatching(/send|forward/), expect.anything())
   })

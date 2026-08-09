@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type {
+  AiRule,
   AppSnapshot,
   Peer,
   Rule,
@@ -9,7 +10,7 @@ import type {
 } from '../../shared/types'
 import { parseDesktopError, reduceMonitorEvent, validateCredentials } from './domain'
 
-type Page = 'dashboard' | 'sources' | 'rules' | 'testing' | 'settings'
+type Page = 'dashboard' | 'sources' | 'rules' | 'aiRules' | 'testing' | 'settings'
 
 export function App() {
   const [snapshot, setSnapshot] = useState<AppSnapshot | null>(null)
@@ -296,6 +297,9 @@ function Workspace({
           <NavButton icon="✦" active={page === 'rules'} onClick={() => setPage('rules')}>
             Правила
           </NavButton>
+          <NavButton icon="◈" active={page === 'aiRules'} onClick={() => setPage('aiRules')}>
+            ИИ-правила
+          </NavButton>
           <NavButton icon="◇" active={page === 'testing'} onClick={() => setPage('testing')}>
             Тестирование
           </NavButton>
@@ -319,6 +323,7 @@ function Workspace({
         )}
         {page === 'sources' && <Sources snapshot={snapshot} action={action} />}
         {page === 'rules' && <Rules snapshot={snapshot} action={action} />}
+        {page === 'aiRules' && <AiRules snapshot={snapshot} action={action} />}
         {page === 'testing' && <TestingPage snapshot={snapshot} />}
         {page === 'settings' && (
           <SettingsPage snapshot={snapshot} action={action} onReload={onReload} />
@@ -341,7 +346,8 @@ function Dashboard({
   const configured = Boolean(
     snapshot.settings.destination_peer_id &&
       snapshot.sources.length &&
-      (snapshot.rules.length || snapshot.settings.ai_enabled)
+      (snapshot.rules.some((rule) => rule.enabled) ||
+        snapshot.ai_rules.some((rule) => rule.enabled))
   )
   return (
     <>
@@ -388,7 +394,7 @@ function Dashboard({
           </h2>
           <p className="muted">
             {formatCount(snapshot.sources.length, ['источник', 'источника', 'источников'])} ·{' '}
-            {formatCount(snapshot.rules.length, ['правило', 'правила', 'правил'])}
+            {formatCount(snapshot.rules.length + snapshot.ai_rules.length, ['правило', 'правила', 'правил'])}
           </p>
         </div>
         <div className="radar" aria-hidden="true">
@@ -797,11 +803,179 @@ function Rules({
   )
 }
 
+function AiRules({
+  snapshot,
+  action
+}: {
+  snapshot: AppSnapshot
+  action: (work: () => Promise<unknown>) => Promise<void>
+}) {
+  const [prompt, setPrompt] = useState('')
+  const [actionPrompt, setActionPrompt] = useState('')
+  const [applyTo, setApplyTo] = useState<AiRule['apply_to']>('forwarded')
+  const [editingId, setEditingId] = useState<string | null>(null)
+
+  function resetForm() {
+    setPrompt('')
+    setActionPrompt('')
+    setApplyTo('forwarded')
+    setEditingId(null)
+  }
+
+  async function save(event: React.FormEvent) {
+    event.preventDefault()
+    if (!prompt.trim() || !actionPrompt.trim()) return
+    await action(() =>
+      editingId
+        ? window.chatrd.call('aiRules.update', {
+            id: editingId,
+            values: {
+              prompt,
+              action_prompt: actionPrompt,
+              apply_to: applyTo
+            }
+          })
+        : window.chatrd.call('aiRules.create', {
+            prompt,
+            action_prompt: actionPrompt,
+            apply_to: applyTo
+          })
+    )
+    resetForm()
+  }
+
+  return (
+    <>
+      <PageHeader
+        eyebrow="Фильтры"
+        title="ИИ-правила"
+        description="Первый промпт отбирает сообщения, второй создаёт дополнительный контент для отправки."
+      />
+      <section className="rule-layout">
+        <form className="panel rule-builder" onSubmit={save}>
+          <div className="panel-heading">
+            <div>
+              <p className="eyebrow">{editingId ? 'Редактирование' : 'Новое ИИ-правило'}</p>
+              <h3>{editingId ? 'Изменить правило' : 'Добавить правило'}</h3>
+            </div>
+          </div>
+          <Field label="Промпт классификации">
+            <textarea
+              value={prompt}
+              onChange={(event) => setPrompt(event.target.value)}
+              placeholder="Отбирай сообщения о рисках и срыве сроков"
+              maxLength={4000}
+              rows={5}
+              required
+            />
+          </Field>
+          <Field label="Промпт действия">
+            <textarea
+              value={actionPrompt}
+              onChange={(event) => setActionPrompt(event.target.value)}
+              placeholder="Сделай краткое резюме и перечисли необходимые действия"
+              maxLength={4000}
+              rows={5}
+              required
+            />
+          </Field>
+          <Field label="Когда применять">
+            <select
+              value={applyTo}
+              onChange={(event) => setApplyTo(event.target.value as AiRule['apply_to'])}
+            >
+              <option value="forwarded">К пересланным сообщениям</option>
+              <option value="all">Ко всем сообщениям</option>
+            </select>
+          </Field>
+          <div className="ai-rule-form-actions">
+            {editingId && (
+              <button type="button" className="secondary" onClick={resetForm}>
+                Отмена
+              </button>
+            )}
+            <button className="primary" disabled={!prompt.trim() || !actionPrompt.trim()}>
+              {editingId ? 'Сохранить' : 'Добавить'}
+            </button>
+          </div>
+        </form>
+
+        <section className="panel">
+          <div className="panel-heading">
+            <div>
+              <p className="eyebrow">Список</p>
+              <h3>{formatCount(snapshot.ai_rules.length, ['правило', 'правила', 'правил'])}</h3>
+            </div>
+          </div>
+          {snapshot.ai_rules.length === 0 ? (
+            <Empty title="Нет ИИ-правил" text="Добавьте промпт для локальной модели." />
+          ) : (
+            <div className="rule-list">
+              {snapshot.ai_rules.map((rule) => (
+                <div className={`rule-row ${rule.enabled ? '' : 'disabled'}`} key={rule.id}>
+                  <span className="rule-glyph">AI</span>
+                  <div className="grow ai-rule-copy">
+                    <strong>Фильтр: {rule.prompt}</strong>
+                    <span>Действие: {rule.action_prompt || 'не настроено'}</span>
+                    <span>
+                      {rule.apply_to === 'forwarded'
+                        ? 'Только пересланные сообщения'
+                        : 'Все сообщения'}
+                    </span>
+                  </div>
+                  <label className="switch" title={rule.enabled ? 'Выключить правило' : 'Включить правило'}>
+                    <input
+                      type="checkbox"
+                      checked={rule.enabled}
+                      onChange={(event) =>
+                        action(() =>
+                          window.chatrd.call('aiRules.update', {
+                            id: rule.id,
+                            values: { enabled: event.target.checked }
+                          })
+                        )
+                      }
+                    />
+                    <i />
+                  </label>
+                  <button
+                    type="button"
+                    className="icon-button"
+                    aria-label={`Изменить ИИ-правило ${rule.prompt}`}
+                    onClick={() => {
+                      setEditingId(rule.id)
+                      setPrompt(rule.prompt)
+                      setActionPrompt(rule.action_prompt)
+                      setApplyTo(rule.apply_to)
+                    }}
+                  >
+                    ✎
+                  </button>
+                  <button
+                    className="icon-button danger-text"
+                    aria-label={`Удалить ИИ-правило ${rule.prompt}`}
+                    onClick={() =>
+                      action(() => window.chatrd.call('aiRules.delete', { id: rule.id }))
+                    }
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      </section>
+    </>
+  )
+}
+
 function TestingPage({ snapshot }: { snapshot: AppSnapshot }) {
   const [sourcePeerId, setSourcePeerId] = useState(
     snapshot.sources[0] ? String(snapshot.sources[0].peer_id) : ''
   )
   const [message, setMessage] = useState('')
+  const [isForwarded, setIsForwarded] = useState(true)
   const [result, setResult] = useState<TestingEvaluation | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -815,7 +989,8 @@ function TestingPage({ snapshot }: { snapshot: AppSnapshot }) {
     try {
       const evaluation = await window.chatrd.call<TestingEvaluation>('testing.evaluate', {
         source_peer_id: Number(sourcePeerId),
-        message
+        message,
+        is_forwarded: isForwarded
       })
       setResult(evaluation)
     } catch (caught) {
@@ -875,6 +1050,18 @@ function TestingPage({ snapshot }: { snapshot: AppSnapshot }) {
                   maxLength={8000}
                 />
               </Field>
+              <Field label="Тип сообщения">
+                <select
+                  value={isForwarded ? 'forwarded' : 'regular'}
+                  onChange={(event) => {
+                    setIsForwarded(event.target.value === 'forwarded')
+                    setResult(null)
+                  }}
+                >
+                  <option value="forwarded">Пересланное сообщение</option>
+                  <option value="regular">Обычное сообщение</option>
+                </select>
+              </Field>
               <FormError message={error} />
               <button className="primary wide" disabled={busy || !message.trim()}>
                 {busy ? 'Проверка…' : 'Отправить тест'}
@@ -899,21 +1086,49 @@ function TestingPage({ snapshot }: { snapshot: AppSnapshot }) {
                   <p>{testingDecisionDescription(result)}</p>
                 </div>
               </div>
+              {(result.copy_preview_html || result.delivery_mode === 'forward') && (
+                <section className="testing-preview">
+                  <div>
+                    <p className="eyebrow">Доставка</p>
+                    <h3>
+                      {result.delivery_mode === 'copy'
+                        ? 'Предпросмотр копии'
+                        : 'Пересылка Telegram'}
+                    </h3>
+                  </div>
+                  {result.copy_preview_html ? (
+                    <div
+                      className="telegram-copy-preview"
+                      aria-label="Предпросмотр сообщения в чате назначения"
+                      dangerouslySetInnerHTML={{ __html: result.copy_preview_html }}
+                    />
+                  ) : (
+                    <p className="muted small">
+                      В чат назначения будет переслано исходное сообщение без изменений.
+                      Дополнение ИИ, если оно есть, будет отправлено следом.
+                    </p>
+                  )}
+                </section>
+              )}
               <div className="testing-rule-summary">
                 <strong>
                   {formatCount(
-                    result.evaluated_rules.filter((rule) => rule.matched).length,
+                    result.evaluated_rules.filter((rule) => rule.matched).length +
+                      result.evaluated_ai_rules.filter((rule) => rule.matched).length,
                     ['сработало', 'сработали', 'сработали']
                   )}
                 </strong>
                 <span>
-                  из {formatCount(result.evaluated_rules.length, ['правила', 'правил', 'правил'])}
+                  из {formatCount(
+                    result.evaluated_rules.length + result.evaluated_ai_rules.length,
+                    ['правила', 'правил', 'правил']
+                  )}
                 </span>
               </div>
-              {result.evaluated_rules.length === 0 ? (
+              {result.evaluated_rules.length + result.evaluated_ai_rules.length === 0 ? (
                 <Empty
                   title="Нет применимых правил"
-                  text="Для этого источника нет включённых глобальных или локальных правил."
+                  text="Нет включённых правил для проверки."
                 />
               ) : (
                 <div className="testing-rule-list">
@@ -940,6 +1155,36 @@ function TestingPage({ snapshot }: { snapshot: AppSnapshot }) {
                       </div>
                     )
                   })}
+                  {result.evaluated_ai_rules.map((rule) => (
+                    <div
+                      className={`testing-rule ${rule.matched ? 'matched' : ''}`}
+                      key={rule.id}
+                    >
+                      <span className="testing-rule-mark" aria-hidden="true">
+                        {rule.matched ? '✓' : '–'}
+                      </span>
+                      <div className="grow ai-rule-copy">
+                        <strong>{rule.prompt}</strong>
+                        <span>
+                          ИИ-правило · {rule.apply_to === 'forwarded'
+                            ? 'только пересланные сообщения'
+                            : 'все сообщения'}
+                        </span>
+                        {rule.action_result && (
+                          <p className="testing-ai-action">
+                            <b>Дополнение:</b> {rule.action_result}
+                          </p>
+                        )}
+                      </div>
+                      <span className={`pill ${rule.matched ? 'ok' : ''}`}>
+                        {!rule.applicable
+                          ? 'Не применяется'
+                          : rule.matched
+                            ? 'Сработало'
+                            : 'Не сработало'}
+                      </span>
+                    </div>
+                  ))}
                 </div>
               )}
             </>
@@ -976,10 +1221,8 @@ function SettingsPage({
 
   function ollamaValues(): Partial<Settings> {
     return {
-      ai_enabled: ollama.ai_enabled,
       ollama_base_url: ollama.ollama_base_url,
       ollama_model: ollama.ollama_model,
-      ollama_prompt: ollama.ollama_prompt,
       ollama_timeout_seconds: 120,
       ollama_temperature: 0
     }
@@ -1019,7 +1262,7 @@ function SettingsPage({
       <PageHeader
         eyebrow="Параметры"
         title="Настройки"
-        description="Формат отправки, локальная ИИ-фильтрация и сессия Telegram."
+        description="Формат отправки, локальная модель и сессия Telegram."
       />
       <section className="panel settings-panel">
         <div>
@@ -1060,15 +1303,6 @@ function SettingsPage({
             <p className="eyebrow">Локальная модель</p>
             <h3>Ollama · gpt-oss:20b</h3>
           </div>
-          <label className="switch labeled-switch">
-            <input
-              type="checkbox"
-              checked={ollama.ai_enabled}
-              onChange={(event) => updateOllama('ai_enabled', event.target.checked)}
-            />
-            <i />
-            <span>{ollama.ai_enabled ? 'Включено' : 'Выключено'}</span>
-          </label>
         </div>
 
         <div className="ollama-form-grid">
@@ -1159,10 +1393,8 @@ function SettingsPage({
 
 function ollamaForm(settings: Settings) {
   return {
-    ai_enabled: settings.ai_enabled,
     ollama_base_url: settings.ollama_base_url,
-    ollama_model: settings.ollama_model,
-    ollama_prompt: settings.ollama_prompt
+    ollama_model: settings.ollama_model
   }
 }
 

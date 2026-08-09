@@ -24,9 +24,9 @@ The initial MVP implementation includes:
 - Global and per-source keyword, phrase, and hashtag rules.
 - Unicode-aware case-insensitive and whole-word matching.
 - Side-effect-free testing area for previewing applicable and matched rules.
-- Optional semantic matching through Ollama with `gpt-oss:20b`, structured
-  boolean output, configurable instructions and endpoint, and deterministic
-  internal generation defaults.
+- Optional AI rules through Ollama with `gpt-oss:20b`, a classification prompt
+  plus an action prompt per rule, and per-rule application to forwarded messages
+  (the default) or all messages.
 - Text and media-caption processing.
 - Ordered catch-up, buffered live hand-off, and live monitoring.
 - SQLite migrations, per-source cursors, and processing deduplication.
@@ -89,9 +89,8 @@ To enable semantic matching, install Ollama and download the model:
 ollama pull gpt-oss:20b
 ```
 
-Then open **Настройки → Ollama**, enter the selection instructions, send a test
-message to verify the model, and enable the filter. The default server address is
-`http://127.0.0.1:11434`.
+Then configure and test the model under **Настройки**, and add prompts under
+**ИИ-правила**. The default server address is `http://127.0.0.1:11434`.
 
 No Telegram credentials belong in source files, environment templates, test
 fixtures, commits, or CI secrets.
@@ -185,9 +184,11 @@ recreating every rule.
 ## Rule semantics
 
 - Rules are OR-combined.
-- When the Ollama filter is enabled, messages that do not match a literal rule
-  are classified against the configured instructions. A positive AI result is
-  an additional OR match; literal matches do not invoke the model.
+- Messages that do not match a literal rule are checked against enabled,
+  applicable AI rules in configuration order. Each AI rule applies either only
+  to incoming Telegram forwards (the default) or to all messages. A positive AI
+  result is an additional OR match and its action prompt generates content to
+  append to the delivery, including when a literal rule also matches.
 - Case-insensitive matching uses Unicode NFC normalization and case folding.
 - Keywords are literal substrings unless whole-word mode is enabled.
 - Phrases are literal contiguous strings, not regular expressions.

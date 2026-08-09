@@ -208,6 +208,7 @@ class TelethonGateway:
             author_name=utils.get_display_name(sender) if sender else None,
             source_username=getattr(chat, "username", None),
             source_peer_type=_peer_type(chat),
+            is_forwarded=getattr(message, "fwd_from", None) is not None,
         )
 
     async def _translate(self, awaitable: Any) -> Any:

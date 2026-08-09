@@ -1,12 +1,20 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from . import __version__
 from .database import Database
+from .formatter import format_copy
 from .matcher import match_message
-from .models import AuthenticationRequired, ValidationError
+from .models import (
+    AuthenticationRequired,
+    MessageEnvelope,
+    Rule,
+    RuleType,
+    ValidationError,
+)
 from .monitor import Monitor
 from .ollama import OllamaClient
 from .processor import EventCallback, MessageProcessor, _no_event
@@ -45,6 +53,10 @@ class WorkerApplication:
             "rules.create": self._rules_create,
             "rules.update": self._rules_update,
             "rules.delete": self._rules_delete,
+            "aiRules.list": self._ai_rules_list,
+            "aiRules.create": self._ai_rules_create,
+            "aiRules.update": self._ai_rules_update,
+            "aiRules.delete": self._ai_rules_delete,
             "testing.evaluate": self._testing_evaluate,
             "monitor.start": self._monitor_start,
             "monitor.pause": self._monitor_pause,
@@ -66,6 +78,7 @@ class WorkerApplication:
             "settings": self.database.get_settings(),
             "sources": [source.to_dict() for source in self.database.list_sources()],
             "rules": [rule.to_dict() for rule in self.database.list_rules()],
+            "ai_rules": [rule.to_dict() for rule in self.database.list_ai_rules()],
             "monitor": self.monitor.snapshot() if self.monitor else {
                 "state": "paused",
                 "counts": self.database.processing_counts(),
@@ -218,6 +231,28 @@ class WorkerApplication:
         self.database.delete_rule(str(payload["id"]))
         return {"ok": True}
 
+    async def _ai_rules_list(self, _payload: dict[str, Any]) -> list[dict[str, Any]]:
+        return [rule.to_dict() for rule in self.database.list_ai_rules()]
+
+    async def _ai_rules_create(self, payload: dict[str, Any]) -> dict[str, Any]:
+        rule = self.database.create_ai_rule(
+            prompt=payload.get("prompt"),
+            action_prompt=payload.get("action_prompt"),
+            apply_to=payload.get("apply_to", "forwarded"),
+        )
+        return rule.to_dict()
+
+    async def _ai_rules_update(self, payload: dict[str, Any]) -> dict[str, Any]:
+        rule_id = str(payload.get("id", ""))
+        values = payload.get("values")
+        if not rule_id or not isinstance(values, dict):
+            raise ValidationError("AI rule ID and values are required")
+        return self.database.update_ai_rule(rule_id, values).to_dict()
+
+    async def _ai_rules_delete(self, payload: dict[str, Any]) -> dict[str, bool]:
+        self.database.delete_ai_rule(str(payload["id"]))
+        return {"ok": True}
+
     async def _testing_evaluate(self, payload: dict[str, Any]) -> dict[str, Any]:
         source_peer_id = _positive_or_negative_int(
             payload.get("source_peer_id"), "Source chat"
@@ -238,6 +273,9 @@ class WorkerApplication:
             raise ValidationError("Test message is required")
         if len(message) > 8_000:
             raise ValidationError("Test message cannot exceed 8,000 characters")
+        is_forwarded = payload.get("is_forwarded", False)
+        if not isinstance(is_forwarded, bool):
+            raise ValidationError("Test forwarded state must be true or false")
 
         rules = [
             rule for rule in self.database.list_rules(source_peer_id) if rule.enabled
@@ -245,10 +283,67 @@ class WorkerApplication:
         result = match_message(message, rules)
         matched_rule_ids = {rule.id for rule in result.matched_rules}
         settings = self.database.get_settings()
+        evaluated_ai_rules: list[dict[str, Any]] = []
+        ai_matched = False
+        for ai_rule in self.database.list_ai_rules():
+            if not ai_rule.enabled:
+                continue
+            applicable = ai_rule.apply_to.value == "all" or is_forwarded
+            matched = False
+            action_result = None
+            if applicable:
+                matched = await OllamaClient().classify(
+                    message, {**settings, "ollama_prompt": ai_rule.prompt}
+                )
+                if matched and ai_rule.action_prompt:
+                    action_result = await OllamaClient().act(
+                        message, ai_rule.action_prompt, settings
+                    )
+            ai_matched = ai_matched or matched
+            evaluated_ai_rules.append(
+                {
+                    **ai_rule.to_dict(),
+                    "applicable": applicable,
+                    "matched": matched,
+                    "action_result": action_result,
+                }
+            )
+        matched = result.matched or ai_matched
         destination_configured = settings["destination_peer_id"] is not None
-        would_send = result.matched and source.enabled and destination_configured
+        would_send = matched and source.enabled and destination_configured
+        matched_ai_rules = [rule for rule in evaluated_ai_rules if rule["matched"]]
+        preview_rules = result.matched_rules + tuple(
+            Rule(
+                id=rule["id"],
+                source_peer_id=None,
+                type=RuleType.PHRASE,
+                pattern="ИИ",
+            )
+            for rule in matched_ai_rules
+        )
+        preview_addition = "\n\n".join(
+            rule["action_result"]
+            for rule in matched_ai_rules
+            if rule["action_result"]
+        ) or None
 
-        if not result.matched:
+        copy_preview_html = None
+        if matched and settings["delivery_mode"] == "copy":
+            preview_message = MessageEnvelope(
+                source_peer_id=source_peer_id,
+                source_message_id=0,
+                source_timestamp=datetime.now(UTC),
+                source_name=source.display_name,
+                text=message,
+                is_forwarded=is_forwarded,
+            )
+            copy_preview_html = format_copy(
+                preview_message,
+                preview_rules,
+                additional_content=preview_addition,
+            ).text
+
+        if not matched:
             reason = "no_match"
         elif not source.enabled:
             reason = "source_disabled"
@@ -260,25 +355,27 @@ class WorkerApplication:
         return {
             "source_peer_id": source_peer_id,
             "source_enabled": source.enabled,
+            "message_is_forwarded": is_forwarded,
             "destination_peer_id": settings["destination_peer_id"],
             "delivery_mode": settings["delivery_mode"],
-            "matched": result.matched,
+            "matched": matched,
             "would_send": would_send,
+            "copy_preview_html": copy_preview_html,
             "reason": reason,
             "evaluated_rules": [
                 {**rule.to_dict(), "matched": rule.id in matched_rule_ids}
                 for rule in rules
             ],
+            "evaluated_ai_rules": evaluated_ai_rules,
         }
 
     async def _monitor_start(self, _payload: dict[str, Any]) -> dict[str, Any]:
         if not self.database.list_sources():
             raise ValidationError("Choose at least one source chat")
-        settings = self.database.get_settings()
-        if not any(rule.enabled for rule in self.database.list_rules()) and not settings[
-            "ai_enabled"
-        ]:
-            raise ValidationError("Create at least one enabled rule or enable AI matching")
+        has_literal_rule = any(rule.enabled for rule in self.database.list_rules())
+        has_ai_rule = any(rule.enabled for rule in self.database.list_ai_rules())
+        if not has_literal_rule and not has_ai_rule:
+            raise ValidationError("Create at least one enabled rule")
         monitor = await self._require_monitor()
         return await monitor.start()
 

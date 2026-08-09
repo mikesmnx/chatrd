@@ -41,15 +41,32 @@ export type EvaluatedRule = Rule & {
   matched: boolean
 }
 
+export type AiRule = {
+  id: string
+  prompt: string
+  action_prompt: string
+  apply_to: 'forwarded' | 'all'
+  enabled: boolean
+}
+
+export type EvaluatedAiRule = AiRule & {
+  applicable: boolean
+  matched: boolean
+  action_result: string | null
+}
+
 export type TestingEvaluation = {
   source_peer_id: number
   source_enabled: boolean
+  message_is_forwarded: boolean
   destination_peer_id: number | null
   delivery_mode: 'copy' | 'forward'
   matched: boolean
   would_send: boolean
+  copy_preview_html: string | null
   reason: 'matched_rules' | 'no_match' | 'source_disabled' | 'destination_missing'
   evaluated_rules: EvaluatedRule[]
+  evaluated_ai_rules: EvaluatedAiRule[]
 }
 
 export type Settings = {
@@ -75,6 +92,7 @@ export type AppSnapshot = {
   settings: Settings
   sources: Source[]
   rules: Rule[]
+  ai_rules: AiRule[]
   monitor: MonitorSnapshot
 }
 

@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from chatrd_worker.formatter import TELEGRAM_TEXT_LIMIT, format_copy, source_message_link
+from chatrd_worker.formatter import (
+    TELEGRAM_TEXT_LIMIT,
+    format_ai_addition,
+    format_copy,
+    source_message_link,
+)
 from chatrd_worker.models import MessageEnvelope, Rule, RuleType
 
 
@@ -61,3 +66,21 @@ def test_missing_author_and_link_are_safe() -> None:
     ).text
     assert "Не указан" in output
     assert "Открыть исходное сообщение" not in output
+
+
+def test_copy_appends_ai_content_and_escapes_it() -> None:
+    output = format_copy(
+        message(text="Original"),
+        (Rule("r", None, RuleType.KEYWORD, "release"),),
+        additional_content="Summary <urgent>",
+    ).text
+    assert "Original" in output
+    assert "Дополнение ИИ:" in output
+    assert "Summary &lt;urgent&gt;" in output
+
+
+def test_standalone_ai_addition_is_safe_and_bounded() -> None:
+    output = format_ai_addition("<risk>" * 1000, limit=120).text
+    assert output.startswith("<b>Дополнение ИИ:</b>")
+    assert "&lt;risk&gt;" in output
+    assert len(output) <= 120

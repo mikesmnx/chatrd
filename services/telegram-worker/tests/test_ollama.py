@@ -44,7 +44,7 @@ async def test_structured_classification_request(monkeypatch) -> None:
     assert captured["timeout"] == 30
     assert captured["body"]["model"] == "gpt-oss:20b"
     assert captured["body"]["stream"] is False
-    assert captured["body"]["think"] is False
+    assert "think" not in captured["body"]
     assert captured["body"]["format"]["properties"]["match"] == {"type": "boolean"}
     assert "release candidate" in captured["body"]["messages"][1]["content"]
 
@@ -63,6 +63,24 @@ async def test_chat_returns_the_models_answer(monkeypatch) -> None:
     }
     assert captured["body"]["messages"] == [{"role": "user", "content": "Hello"}]
     assert "format" not in captured["body"]
+    assert "think" not in captured["body"]
+
+
+async def test_action_prompt_returns_content_to_append(monkeypatch) -> None:
+    captured = {}
+
+    def fake_urlopen(request, **_kwargs):
+        captured["body"] = json.loads(request.data)
+        return Response(b'{"message":{"content":"Short summary"}}')
+
+    monkeypatch.setattr("chatrd_worker.ollama.urlopen", fake_urlopen)
+    result = await OllamaClient().act(
+        "Original message", "Summarize in one sentence", settings()
+    )
+    assert result == "Short summary"
+    assert "Summarize in one sentence" in captured["body"]["messages"][0]["content"]
+    assert "Original message" in captured["body"]["messages"][1]["content"]
+    assert "think" not in captured["body"]
 
 
 @pytest.mark.parametrize("message", ["", "   ", "x" * 8001])

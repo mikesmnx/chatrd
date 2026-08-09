@@ -17,6 +17,11 @@ class DeliveryMode(StrEnum):
     FORWARD = "forward"
 
 
+class AiRuleApplyTo(StrEnum):
+    FORWARDED = "forwarded"
+    ALL = "all"
+
+
 class ProcessingOutcome(StrEnum):
     PENDING = "pending"
     NO_MATCH = "no_match"
@@ -45,6 +50,20 @@ class Rule:
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
         data["type"] = self.type.value
+        return data
+
+
+@dataclass(frozen=True, slots=True)
+class AiRule:
+    id: str
+    prompt: str
+    action_prompt: str = ""
+    apply_to: AiRuleApplyTo = AiRuleApplyTo.FORWARDED
+    enabled: bool = True
+
+    def to_dict(self) -> dict[str, Any]:
+        data = asdict(self)
+        data["apply_to"] = self.apply_to.value
         return data
 
 
@@ -84,6 +103,7 @@ class MessageEnvelope:
     author_name: str | None = None
     source_username: str | None = None
     source_peer_type: str = "unknown"
+    is_forwarded: bool = False
 
 
 @dataclass(frozen=True, slots=True)

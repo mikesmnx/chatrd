@@ -28,4 +28,10 @@ def test_domain_inputs_change_id() -> None:
         source_message_id=5,
     )
     assert baseline != changed
-
+    assert delivery_random_id(
+        account_id=1,
+        destination_peer_id=2,
+        source_peer_id=3,
+        source_message_id=4,
+        purpose="ai-action",
+    ) != baseline

@@ -17,13 +17,20 @@ class FakeSemanticMatcher:
     def __init__(self, result: bool):
         self.result = result
         self.calls: list[str] = []
+        self.action_calls: list[tuple[str, str]] = []
 
     async def classify(self, text: str, _settings) -> bool:
         self.calls.append(text)
         return self.result
 
+    async def act(self, text: str, action_prompt: str, _settings) -> str:
+        self.action_calls.append((text, action_prompt))
+        return "Краткое резюме от ИИ"
 
-def envelope(message_id: int, text: str = "release #decision") -> MessageEnvelope:
+
+def envelope(
+    message_id: int, text: str = "release #decision", *, is_forwarded: bool = False
+) -> MessageEnvelope:
     return MessageEnvelope(
         source_peer_id=-1001,
         source_message_id=message_id,
@@ -33,6 +40,7 @@ def envelope(message_id: int, text: str = "release #decision") -> MessageEnvelop
         author_name="Alex",
         source_username="source_one",
         source_peer_type="supergroup",
+        is_forwarded=is_forwarded,
     )
 
 
@@ -121,8 +129,10 @@ async def test_ai_semantic_matching_without_literal_rules(
         initial_scan_mode="now",
         initial_scan_value=None,
     )
-    database.update_settings(
-        {"ai_enabled": True, "ollama_prompt": "Отбирай сообщения о рисках."}
+    database.create_ai_rule(
+        prompt="Отбирай сообщения о рисках.",
+        action_prompt="Сделай краткое резюме.",
+        apply_to="all",
     )
     semantic = FakeSemanticMatcher(semantic_result)
     gateway = FakeGateway()
@@ -135,17 +145,77 @@ async def test_ai_semantic_matching_without_literal_rules(
     assert len(gateway.sent) == int(semantic_result)
     if semantic_result:
         assert "ИИ" in gateway.sent[0][1].text
+        assert "Краткое резюме от ИИ" in gateway.sent[0][1].text
+        assert semantic.action_calls == [
+            ("Срок релиза под угрозой", "Сделай краткое резюме.")
+        ]
+    else:
+        assert semantic.action_calls == []
 
 
-async def test_literal_match_avoids_unnecessary_ai_call(configured) -> None:
-    configured.update_settings(
-        {"ai_enabled": True, "ollama_prompt": "Отбирай сообщения о рисках."}
+async def test_literal_and_ai_matches_include_ai_action(configured) -> None:
+    configured.create_ai_rule(
+        prompt="Отбирай сообщения о рисках.",
+        action_prompt="Сделай краткое резюме.",
+        apply_to="all",
     )
-    semantic = FakeSemanticMatcher(False)
+    semantic = FakeSemanticMatcher(True)
     gateway = FakeGateway()
     processor = MessageProcessor(
         configured, gateway, account_id=7, semantic_matcher=semantic
     )
 
     assert await processor.process(envelope(21)) == "sent"
+    assert semantic.calls == ["release #decision"]
+    assert semantic.action_calls == [
+        ("release #decision", "Сделай краткое резюме.")
+    ]
+    assert "release, #decision, ИИ" in gateway.sent[0][1].text
+    assert "Краткое резюме от ИИ" in gateway.sent[0][1].text
+
+
+async def test_forwarded_ai_rule_only_classifies_forwarded_messages(database) -> None:
+    database.upsert_source(
+        peer_id=-1001,
+        enabled=True,
+        initial_scan_mode="now",
+        initial_scan_value=None,
+    )
+    database.create_ai_rule(
+        prompt="Отбирай важные пересылки.", action_prompt="Сделай краткое резюме."
+    )
+    semantic = FakeSemanticMatcher(True)
+    processor = MessageProcessor(
+        database, FakeGateway(), account_id=7, semantic_matcher=semantic
+    )
+
+    assert await processor.process(envelope(22, "Обычное сообщение")) == "no_match"
     assert semantic.calls == []
+    assert await processor.process(
+        envelope(23, "Пересланное сообщение", is_forwarded=True)
+    ) == "sent"
+    assert semantic.calls == ["Пересланное сообщение"]
+
+
+async def test_ai_action_follows_native_forward_as_separate_message(database) -> None:
+    database.upsert_source(
+        peer_id=-1001,
+        enabled=True,
+        initial_scan_mode="now",
+        initial_scan_value=None,
+    )
+    database.update_settings({"delivery_mode": "forward"})
+    database.create_ai_rule(
+        prompt="Отбирай риски.", action_prompt="Сделай резюме.", apply_to="all"
+    )
+    semantic = FakeSemanticMatcher(True)
+    gateway = FakeGateway()
+    processor = MessageProcessor(
+        database, gateway, account_id=7, semantic_matcher=semantic
+    )
+
+    assert await processor.process(envelope(24, "Риск")) == "sent"
+    assert len(gateway.forwarded) == 1
+    assert len(gateway.sent) == 1
+    assert "Краткое резюме от ИИ" in gateway.sent[0][1].text
+    assert gateway.sent[0][2] != gateway.forwarded[0][3]

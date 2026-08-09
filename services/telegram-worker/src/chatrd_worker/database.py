@@ -13,9 +13,18 @@ from typing import Any
 from urllib.parse import urlparse
 
 from .matcher import validate_rule
-from .models import ProcessingOutcome, Rule, RuleType, Source, TelegramPeer, ValidationError
+from .models import (
+    AiRule,
+    AiRuleApplyTo,
+    ProcessingOutcome,
+    Rule,
+    RuleType,
+    Source,
+    TelegramPeer,
+    ValidationError,
+)
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 3
 
 SCHEMA = """
 PRAGMA foreign_keys = ON;
@@ -58,6 +67,17 @@ CREATE TABLE IF NOT EXISTS rules (
     pattern TEXT NOT NULL,
     case_sensitive INTEGER NOT NULL DEFAULT 0,
     whole_word INTEGER NOT NULL DEFAULT 0,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS ai_rules (
+    id TEXT PRIMARY KEY,
+    prompt TEXT NOT NULL,
+    action_prompt TEXT NOT NULL DEFAULT '',
+    apply_to TEXT NOT NULL DEFAULT 'forwarded'
+        CHECK(apply_to IN ('forwarded', 'all')),
     enabled INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -139,6 +159,39 @@ class Database:
     def migrate(self) -> None:
         with self.transaction() as connection:
             connection.executescript(SCHEMA)
+            migrated_v2 = connection.execute(
+                "SELECT 1 FROM schema_migrations WHERE version=2"
+            ).fetchone()
+            if migrated_v2 is None:
+                legacy = {
+                    row["key"]: json.loads(row["value_json"])
+                    for row in connection.execute(
+                        "SELECT key, value_json FROM app_settings "
+                        "WHERE key IN ('ai_enabled', 'ollama_prompt')"
+                    ).fetchall()
+                }
+                prompt = legacy.get("ollama_prompt")
+                if legacy.get("ai_enabled") is True and isinstance(prompt, str) and prompt.strip():
+                    now = utc_now()
+                    connection.execute(
+                        """
+                        INSERT INTO ai_rules(
+                            id, prompt, action_prompt, apply_to, enabled, created_at, updated_at
+                        ) VALUES (?, ?, '', 'all', 1, ?, ?)
+                        """,
+                        (str(uuid.uuid4()), prompt.strip(), now, now),
+                    )
+                connection.execute(
+                    "INSERT INTO schema_migrations(version, applied_at) VALUES (2, ?)",
+                    (utc_now(),),
+                )
+            columns = {
+                row["name"] for row in connection.execute("PRAGMA table_info(ai_rules)")
+            }
+            if "action_prompt" not in columns:
+                connection.execute(
+                    "ALTER TABLE ai_rules ADD COLUMN action_prompt TEXT NOT NULL DEFAULT ''"
+                )
             connection.execute(
                 "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?, ?)",
                 (SCHEMA_VERSION, utc_now()),
@@ -456,6 +509,118 @@ class Database:
             rows = self._connection.execute(query, parameters).fetchall()
         return [self._row_to_rule(row) for row in rows]
 
+    def create_ai_rule(
+        self, *, prompt: str, action_prompt: str, apply_to: str = "forwarded"
+    ) -> AiRule:
+        normalized_prompt = self._validate_ai_rule_prompt(prompt)
+        normalized_action_prompt = self._validate_ai_rule_prompt(
+            action_prompt, label="AI rule action prompt"
+        )
+        parsed_apply_to = self._validate_ai_rule_apply_to(apply_to)
+        rule = AiRule(
+            id=str(uuid.uuid4()),
+            prompt=normalized_prompt,
+            action_prompt=normalized_action_prompt,
+            apply_to=parsed_apply_to,
+        )
+        now = utc_now()
+        with self.transaction() as connection:
+            connection.execute(
+                """
+                INSERT INTO ai_rules(
+                    id, prompt, action_prompt, apply_to, enabled, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, 1, ?, ?)
+                """,
+                (
+                    rule.id,
+                    rule.prompt,
+                    rule.action_prompt,
+                    rule.apply_to.value,
+                    now,
+                    now,
+                ),
+            )
+        return rule
+
+    def update_ai_rule(self, rule_id: str, values: dict[str, Any]) -> AiRule:
+        current = self.get_ai_rule(rule_id)
+        if current is None:
+            raise ValidationError("AI rule not found")
+        prompt = self._validate_ai_rule_prompt(values.get("prompt", current.prompt))
+        action_prompt = current.action_prompt
+        if "action_prompt" in values:
+            action_prompt = self._validate_ai_rule_prompt(
+                values["action_prompt"], label="AI rule action prompt"
+            )
+        apply_to = self._validate_ai_rule_apply_to(
+            values.get("apply_to", current.apply_to.value)
+        )
+        enabled = values.get("enabled", current.enabled)
+        if not isinstance(enabled, bool):
+            raise ValidationError("AI rule enabled must be true or false")
+        updated = AiRule(
+            id=current.id,
+            prompt=prompt,
+            action_prompt=action_prompt,
+            apply_to=apply_to,
+            enabled=enabled,
+        )
+        with self.transaction() as connection:
+            connection.execute(
+                """
+                UPDATE ai_rules
+                SET prompt=?, action_prompt=?, apply_to=?, enabled=?, updated_at=?
+                WHERE id=?
+                """,
+                (
+                    updated.prompt,
+                    updated.action_prompt,
+                    updated.apply_to.value,
+                    int(updated.enabled),
+                    utc_now(),
+                    updated.id,
+                ),
+            )
+        return updated
+
+    def delete_ai_rule(self, rule_id: str) -> None:
+        with self.transaction() as connection:
+            connection.execute("DELETE FROM ai_rules WHERE id=?", (rule_id,))
+
+    def get_ai_rule(self, rule_id: str) -> AiRule | None:
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT * FROM ai_rules WHERE id=?", (rule_id,)
+            ).fetchone()
+        return self._row_to_ai_rule(row) if row else None
+
+    def list_ai_rules(self) -> list[AiRule]:
+        with self._lock:
+            rows = self._connection.execute(
+                "SELECT * FROM ai_rules ORDER BY created_at, id"
+            ).fetchall()
+        return [self._row_to_ai_rule(row) for row in rows]
+
+    @staticmethod
+    def _validate_ai_rule_prompt(
+        value: Any, *, label: str = "AI rule prompt"
+    ) -> str:
+        if not isinstance(value, str):
+            raise ValidationError(f"{label} must be text")
+        prompt = value.strip()
+        if not prompt:
+            raise ValidationError(f"{label} cannot be empty")
+        if len(prompt) > 4000:
+            raise ValidationError(f"{label} cannot exceed 4,000 characters")
+        return prompt
+
+    @staticmethod
+    def _validate_ai_rule_apply_to(value: Any) -> AiRuleApplyTo:
+        try:
+            return AiRuleApplyTo(value)
+        except (TypeError, ValueError) as error:
+            raise ValidationError("AI rule application must be forwarded or all") from error
+
     def get_cursor(self, source_peer_id: int) -> int | None:
         with self._lock:
             row = self._connection.execute(
@@ -638,5 +803,15 @@ class Database:
             pattern=row["pattern"],
             case_sensitive=bool(row["case_sensitive"]),
             whole_word=bool(row["whole_word"]),
+            enabled=bool(row["enabled"]),
+        )
+
+    @staticmethod
+    def _row_to_ai_rule(row: sqlite3.Row) -> AiRule:
+        return AiRule(
+            id=row["id"],
+            prompt=row["prompt"],
+            action_prompt=row["action_prompt"],
+            apply_to=AiRuleApplyTo(row["apply_to"]),
             enabled=bool(row["enabled"]),
         )

@@ -59,9 +59,10 @@ flowchart LR
 - The Python worker is trusted local application code. It receives credentials
   only for the active session and never prints them.
 - SQLite stores operational metadata but no source message body/caption.
-- When semantic matching is enabled, the worker sends message text to the
-  configured Ollama endpoint. The default loopback endpoint keeps that traffic
-  on the local computer; users are warned before configuring a remote endpoint.
+- When an applicable AI rule is enabled, the worker sends message text and that
+  rule's classification and action prompts to the configured Ollama endpoint.
+  The default loopback endpoint keeps that traffic on the local computer; users
+  are warned before configuring a remote endpoint.
 - Standard output is reserved for protocol frames. Human-readable logs go to
   standard error or a controlled log sink and pass through redaction.
 
@@ -271,7 +272,12 @@ The matcher is deterministic and side-effect free:
    underscore boundaries; do not rely blindly on ASCII regex `\b`.
 6. Implement hashtag boundaries explicitly so `#action` does not match
    `#actionable`.
-7. Return all matched rule IDs in stable configuration order.
+7. Evaluate enabled AI rules in configuration order alongside literal rules;
+   rules configured for forwarded messages apply only when Telegram marks the
+   incoming source message as forwarded.
+8. For every matching AI rule, run its action prompt and append the results to a
+   formatted copy or send them immediately after an unmodified native forward.
+9. Return the matched rule IDs in stable configuration order.
 
 The pure matcher is the most heavily unit-tested domain module. Synthetic
 fixtures cover ASCII, non-Latin scripts, composed/decomposed Unicode, emoji next

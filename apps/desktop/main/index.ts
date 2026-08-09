@@ -22,6 +22,10 @@ const ALLOWED_METHODS = new Set([
   'rules.create',
   'rules.update',
   'rules.delete',
+  'aiRules.list',
+  'aiRules.create',
+  'aiRules.update',
+  'aiRules.delete',
   'testing.evaluate',
   'monitor.start',
   'monitor.pause',
@@ -144,7 +148,9 @@ function registerIpc(): void {
         result = await worker.request<any>(
           method,
           payload,
-          method === 'ollama.chat' ? 10 * 60_000 : undefined
+          method === 'ollama.chat' || method === 'testing.evaluate'
+            ? 10 * 60_000
+            : undefined
         )
       } catch (error) {
         throw new Error(JSON.stringify({

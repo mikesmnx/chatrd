@@ -4,6 +4,7 @@ import sqlite3
 
 import pytest
 
+from chatrd_worker.database import Database
 from chatrd_worker.models import RuleType, ValidationError
 
 
@@ -114,6 +115,111 @@ def test_rule_crud_and_global_filtering(database) -> None:
     assert updated.enabled is False
     database.delete_rule(local_rule.id)
     assert database.get_rule(local_rule.id) is None
+
+
+def test_ai_rule_crud_defaults_to_forwarded_messages(database) -> None:
+    rule = database.create_ai_rule(
+        prompt="  Отбирай сообщения о рисках.  ",
+        action_prompt="  Сделай краткое резюме.  ",
+    )
+    assert rule.prompt == "Отбирай сообщения о рисках."
+    assert rule.action_prompt == "Сделай краткое резюме."
+    assert rule.apply_to.value == "forwarded"
+    assert database.list_ai_rules() == [rule]
+
+    updated = database.update_ai_rule(
+        rule.id,
+        {
+            "prompt": "Отбирай релизы.",
+            "action_prompt": "Переведи на русский.",
+            "apply_to": "all",
+            "enabled": False,
+        },
+    )
+    assert updated.prompt == "Отбирай релизы."
+    assert updated.action_prompt == "Переведи на русский."
+    assert updated.apply_to.value == "all"
+    assert updated.enabled is False
+
+    database.delete_ai_rule(rule.id)
+    assert database.get_ai_rule(rule.id) is None
+
+
+def test_legacy_enabled_ai_prompt_migrates_to_all_messages_rule(tmp_path) -> None:
+    path = tmp_path / "legacy.db"
+    legacy = Database(path)
+    legacy.update_settings(
+        {"ollama_prompt": "Legacy selection", "ai_enabled": True}
+    )
+    with legacy.transaction() as connection:
+        connection.execute("DELETE FROM ai_rules")
+        connection.execute("DELETE FROM schema_migrations WHERE version=2")
+    legacy.close()
+
+    migrated = Database(path)
+    rules = migrated.list_ai_rules()
+    assert [(rule.prompt, rule.apply_to.value) for rule in rules] == [
+        ("Legacy selection", "all")
+    ]
+    assert rules[0].action_prompt == ""
+    migrated.close()
+
+
+def test_version_two_ai_rules_gain_action_prompt_column(tmp_path) -> None:
+    path = tmp_path / "version-two.db"
+    connection = sqlite3.connect(path)
+    connection.executescript(
+        """
+        CREATE TABLE schema_migrations (
+            version INTEGER PRIMARY KEY,
+            applied_at TEXT NOT NULL
+        );
+        INSERT INTO schema_migrations(version, applied_at) VALUES (2, 'now');
+        CREATE TABLE ai_rules (
+            id TEXT PRIMARY KEY,
+            prompt TEXT NOT NULL,
+            apply_to TEXT NOT NULL,
+            enabled INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        INSERT INTO ai_rules VALUES (
+            'old-rule', 'Legacy filter', 'forwarded', 1, 'now', 'now'
+        );
+        """
+    )
+    connection.commit()
+    connection.close()
+
+    migrated = Database(path)
+    assert migrated.get_ai_rule("old-rule").action_prompt == ""  # type: ignore[union-attr]
+    migrated.close()
+
+
+@pytest.mark.parametrize(
+    ("values", "message"),
+    [
+        ({"prompt": ""}, "cannot be empty"),
+        ({"prompt": "x" * 4001}, "4,000"),
+        ({"prompt": None}, "must be text"),
+        ({"action_prompt": ""}, "action prompt cannot be empty"),
+        ({"apply_to": "sometimes"}, "forwarded or all"),
+        ({"enabled": "yes"}, "true or false"),
+    ],
+)
+def test_invalid_ai_rules_are_rejected(database, values, message) -> None:
+    if "prompt" in values:
+        with pytest.raises(ValidationError, match=message):
+            database.create_ai_rule(
+                prompt=values["prompt"],
+                action_prompt="Valid action",
+                apply_to=values.get("apply_to", "forwarded"),
+            )
+        return
+
+    rule = database.create_ai_rule(prompt="Valid prompt", action_prompt="Valid action")
+    with pytest.raises(ValidationError, match=message):
+        database.update_ai_rule(rule.id, values)
 
 
 def test_processing_uniqueness_and_cursor_transaction(database) -> None:

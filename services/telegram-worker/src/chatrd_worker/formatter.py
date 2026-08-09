@@ -24,6 +24,7 @@ def format_copy(
     *,
     local_timezone: tzinfo | None = None,
     limit: int = TELEGRAM_TEXT_LIMIT,
+    additional_content: str | None = None,
 ) -> FormattedMessage:
     labels = ", ".join(rule.pattern for rule in matched_rules)
     primary = matched_rules[0].pattern if matched_rules else "совпадение"
@@ -45,6 +46,8 @@ def format_copy(
     footer = f'\n\n<a href="{escape(link, quote=True)}">Открыть исходное сообщение</a>' if link else ""
     prefix = "\n".join(header_lines)
     raw_body = message.text or ""
+    if additional_content:
+        raw_body += "\n\nДополнение ИИ:\n" + additional_content.strip()
     escaped_body = escape(raw_body)
     candidate = prefix + escaped_body + footer
     if len(candidate) <= limit:
@@ -60,3 +63,22 @@ def format_copy(
             high = middle - 1
     truncated = escape(raw_body[:low]) + TRUNCATION_MARKER
     return FormattedMessage(prefix + truncated + footer)
+
+
+def format_ai_addition(
+    content: str, *, limit: int = TELEGRAM_TEXT_LIMIT
+) -> FormattedMessage:
+    prefix = "<b>Дополнение ИИ:</b>\n"
+    content = content.strip()
+    escaped = escape(content)
+    if len(prefix) + len(escaped) <= limit:
+        return FormattedMessage(prefix + escaped)
+    available = max(0, limit - len(prefix) - len(TRUNCATION_MARKER))
+    low, high = 0, len(content)
+    while low < high:
+        middle = (low + high + 1) // 2
+        if len(escape(content[:middle])) <= available:
+            low = middle
+        else:
+            high = middle - 1
+    return FormattedMessage(prefix + escape(content[:low]) + TRUNCATION_MARKER)
